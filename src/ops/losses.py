@@ -7,3 +7,6 @@ def get_multi_loss():
 
 def get_loss():
     return nn.CrossEntropyLoss()
+
+def get_bce_loss():
+    return nn.BCELoss()

@@ -189,9 +189,9 @@ class MaskDatasetV1(Dataset):
                     os.path.join(self.image_dir, path, file_name)
                 )
                 self.label_list.append([
-                    np.array(MaskLabel(file_name)),
-                    np.array(GenderLabel(self.labels[image_id][0])),
-                    np.array(AgeLabel(self.labels[image_id][2]))
+                    np.array(MaskLabels(file_name)),
+                    np.array(GenderLabels(self.labels[image_id][0])),
+                    np.array(AgeLabels(self.labels[image_id][2]))
                 ])
 
         random.shuffle(list(zip(self.image_path, self.label_list)))
