@@ -2,7 +2,6 @@ import os
 import csv
 import random
 from typing import Sequence, Callable, Tuple
-from enum import Enum
 
 import numpy as np
 from PIL import Image
@@ -17,7 +16,7 @@ classes = [
     ]
 
 
-def MaskLabel(label):
+def one_hot_mask(label):
     if 'incorrect_mask' in label:
         label = [1, 0, 0]
     elif 'mask' in label:
@@ -29,7 +28,7 @@ def MaskLabel(label):
     return label
 
 
-def GenderLabel(label):
+def one_hot_gender(label):
     label = label.lower()
     if label == 'male':
         label = [1, 0]
@@ -40,7 +39,7 @@ def GenderLabel(label):
     return label
 
 
-def AgeLabel(label):
+def one_hot_age(label):
     label = int(label)
     if label < 30:
         label = [1, 0, 0]
@@ -90,7 +89,7 @@ def AgeLabels(label):
 class TestDataset(Dataset):
     def __init__(
         self,
-        image_dir: os.PathLike,
+        image_paths: os.PathLike,
         transform: Sequence[Callable] = None,
         mode: str = 'train',
     ) -> None:
@@ -106,7 +105,7 @@ class TestDataset(Dataset):
         """
         super().__init__()
 
-        self.image_dir = image_dir
+        self.image_paths = image_paths
         self.transform = transform
         self.mode = mode
 
@@ -116,7 +115,7 @@ class TestDataset(Dataset):
         :return: 데이터셋 길이
         :rtype: int
         """
-        return len(self.image_path)
+        return len(self.image_paths)
 
     def __getitem__(self, index: int) -> Tuple[Tensor]:
         """데이터의 인덱스를 주면 이미지와 정답을 같이 반환하는 함수
@@ -126,7 +125,7 @@ class TestDataset(Dataset):
         :return: 이미지 한장과 정답 값들
         :rtype: Tuple[Tensor]
         """
-        image = Image.open(self.image_path[index])
+        image = Image.open(self.image_paths[index])
 
         if self.transform:
             image = self.transform(image)
@@ -194,12 +193,17 @@ class MaskDatasetV1(Dataset):
                     np.array(AgeLabels(self.labels[image_id][2]))
                 ])
 
-        random.shuffle(list(zip(self.image_path, self.label_list)))
-        valid_num = int((1 - float(self.valid_rate)) * len(self.image_path))
+        data = list(zip(self.image_path, self.label_list))
+        random.shuffle(data)
+        self.shuffle_image, self.shuffle_label = zip(*data)
+        valid_num = int((1 - float(self.valid_rate)) * len(self.shuffle_image))
         if self.mode == 'train':
-            self.image_path = self.image_path[:valid_num]
+            self.shuffle_image = self.shuffle_image[:valid_num]
+            self.shuffle_label = self.shuffle_label[:valid_num]
+
         elif self.mode == 'valid':
-            self.image_path = self.image_path[valid_num:]
+            self.shuffle_image = self.shuffle_image[valid_num:]
+            self.shuffle_label = self.shuffle_label[valid_num:]
 
     def __len__(self) -> int:
         """데이터셋의 길이를 반환
@@ -207,7 +211,7 @@ class MaskDatasetV1(Dataset):
         :return: 데이터셋 길이
         :rtype: int
         """
-        return len(self.image_path)
+        return len(self.shuffle_image)
 
     def __getitem__(self, index: int) -> Tuple[Tensor]:
         """데이터의 인덱스를 주면 이미지와 정답을 같이 반환하는 함수
@@ -217,8 +221,8 @@ class MaskDatasetV1(Dataset):
         :return: 이미지 한장과 정답 값들
         :rtype: Tuple[Tensor]
         """
-        path = self.image_path[index]
-        target = self.label_list[index]
+        path = self.shuffle_image[index]
+        target = self.shuffle_label[index]
 
         image = np.array(Image.open(path).convert('RGB'), dtype=np.float32)
         # image /= 255 -> A.Normalize 적용 안하면 적용해줘야함
@@ -288,12 +292,18 @@ class MaskDatasetV2(Dataset):
                     GenderLabels(self.labels[image_id][0]) * 3 +
                     AgeLabels(self.labels[image_id][2])
                 )
-        random.shuffle(list(zip(self.image_path, self.label_list)))
-        valid_num = int((1 - float(self.valid_rate)) * len(self.image_path))
+
+        data = list(zip(self.image_path, self.label_list))
+        random.shuffle(data)
+        self.shuffle_image, self.shuffle_label = zip(*data)
+        valid_num = int((1 - float(self.valid_rate)) * len(self.shuffle_image))
         if self.mode == 'train':
-            self.image_path = self.image_path[:valid_num]
+            self.shuffle_image = self.shuffle_image[:valid_num]
+            self.shuffle_label = self.shuffle_label[:valid_num]
+
         elif self.mode == 'valid':
-            self.image_path = self.image_path[valid_num:]
+            self.shuffle_image = self.shuffle_image[valid_num:]
+            self.shuffle_label = self.shuffle_label[valid_num:]
 
     def __len__(self) -> int:
         """데이터셋의 길이를 반환
@@ -301,7 +311,7 @@ class MaskDatasetV2(Dataset):
         :return: 데이터셋 길이
         :rtype: int
         """
-        return len(self.image_path)
+        return len(self.shuffle_image)
 
     def __getitem__(self, index: int) -> Tuple[Tensor]:
         """데이터의 인덱스를 주면 이미지와 정답을 같이 반환하는 함수
@@ -311,8 +321,8 @@ class MaskDatasetV2(Dataset):
         :return: 이미지 한장과 정답 값들
         :rtype: Tuple[Tensor]
         """
-        path = self.image_path[index]
-        target = self.label_list[index]
+        path = self.shuffle_image[index]
+        target = self.shuffle_label[index]
         targets = [0]*18
         targets[target] = 1
         targets = np.array(targets)
@@ -382,16 +392,21 @@ class MaskDatasetV3(Dataset):
                 )
                 self.label_list.append(
                     np.array(
-                        MaskLabel(file_name) +
-                        GenderLabel(self.labels[image_id][0]) +
-                        AgeLabel(self.labels[image_id][2]))
+                        one_hot_mask(file_name) +
+                        one_hot_gender(self.labels[image_id][0]) +
+                        one_hot_age(self.labels[image_id][2]))
                 )
-        random.shuffle(list(zip(self.image_path, self.label_list)))
-        valid_num = int((1 - float(self.valid_rate)) * len(self.image_path))
+        data = list(zip(self.image_path, self.label_list))
+        random.shuffle(data)
+        self.shuffle_image, self.shuffle_label = zip(*data)
+        valid_num = int((1 - float(self.valid_rate)) * len(self.shuffle_image))
         if self.mode == 'train':
-            self.image_path = self.image_path[:valid_num]
+            self.shuffle_image = self.shuffle_image[:valid_num]
+            self.shuffle_label = self.shuffle_label[:valid_num]
+
         elif self.mode == 'valid':
-            self.image_path = self.image_path[valid_num:]
+            self.shuffle_image = self.shuffle_image[valid_num:]
+            self.shuffle_label = self.shuffle_label[valid_num:]
 
     def __len__(self) -> int:
         """데이터셋의 길이를 반환
@@ -399,7 +414,7 @@ class MaskDatasetV3(Dataset):
         :return: 데이터셋 길이
         :rtype: int
         """
-        return len(self.image_path)
+        return len(self.shuffle_image)
 
     def __getitem__(self, index: int) -> Tuple[Tensor]:
         """데이터의 인덱스를 주면 이미지와 정답을 같이 반환하는 함수
@@ -409,8 +424,8 @@ class MaskDatasetV3(Dataset):
         :return: 이미지 한장과 정답 값들
         :rtype: Tuple[Tensor]
         """
-        path = self.image_path[index]
-        target = self.label_list[index]
+        path = self.shuffle_image[index]
+        target = self.shuffle_label[index]
 
         image = np.array(Image.open(path).convert('RGB'), dtype=np.float32)
         # image /= 255

@@ -7,18 +7,18 @@ from typing import Dict
 import numpy as np
 from omegaconf import OmegaConf
 import wandb
+from sklearn.metrics import f1_score
 
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
 from lion_pytorch import Lion
 
 from datasets.mask_dataset import MaskDatasetV1
-from models.mask_model import MaskModelV3
+from models.mask_model import MaskModelV2
 from utils.transform import TrainAugmentation, TestAugmentation
 from utils.utils import get_lr
-from ops.losses import get_bce_loss, get_loss
+from ops.losses import get_loss
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -62,7 +62,6 @@ def train(
     """
     model.train()
 
-    loss_fn, loss_fn2 = loss_fn
     loss_value = 0
     mask_loss_value = 0
     gender_loss_value = 0
@@ -82,10 +81,10 @@ def train(
         age_label = age_label.long().to(device)
 
         mask_out, gen_out, age_out = model(images)
-        mask_loss = loss_fn2(mask_out, mask_label)
-        gender_loss = loss_fn2(gen_out, gender_label)
-        age_loss = loss_fn2(age_out, age_label)
-        total_loss = mask_loss + age_loss + age_loss
+        mask_loss = loss_fn(mask_out, mask_label)
+        gender_loss = loss_fn(gen_out, gender_label)
+        age_loss = loss_fn(age_out, age_label)
+        total_loss = mask_loss + gender_loss + age_loss
 
         optimizer.zero_grad()
         total_loss.backward()
@@ -117,9 +116,9 @@ def train(
 
             print(
                 f"Epoch[{epoch}/{epochs}] ({batch + 1}/{len(dataloader)}) "
-                f"| lr {current_lr} \ntrain loss {train_loss:4.4} "
-                f"| mask loss {mask_loss:4.4} | gender loss {gender_loss:4.4} "
-                f"| age loss {age_loss:4.4}\n"
+                f"| lr {current_lr} \ntrain loss {train_loss:4.2} "
+                f"| mask loss {mask_loss:4.2} | gender loss {gender_loss:4.2} "
+                f"| age loss {age_loss:4.2}\n"
                 f"train acc {train_acc:4.2%} | mask acc {mask_acc:4.2%} "
                 f"| gender acc {gender_acc:4.2%} | age acc {age_acc:4.2%}"
             )
@@ -167,8 +166,6 @@ def validation(
     :param loss_fn: 훈련에 사용되는 오차 함수
     :type loss_fn: nn.Module
     """
-    loss_fn, loss_fn2 = loss_fn
-    num_batches = len(dataloader)
     model.eval()
 
     val_mask_losses = []
@@ -182,6 +179,8 @@ def validation(
     accuracy_values = []
 
     example_images = []
+    val_labels = []
+    val_preds = []
 
     with torch.no_grad():
         for batch, (images, targets) in enumerate(dataloader):
@@ -192,10 +191,10 @@ def validation(
             age_label = age_label.long().to(device)
 
             mask_out, gen_out, age_out = model(images)
-            mask_loss = loss_fn2(mask_out, mask_label)
-            gender_loss = loss_fn2(gen_out, gender_label)
-            age_loss = loss_fn2(age_out, age_label)
-            total_loss = mask_loss + age_loss + age_loss
+            mask_loss = loss_fn(mask_out, mask_label)
+            gender_loss = loss_fn(gen_out, gender_label)
+            age_loss = loss_fn(age_out, age_label)
+            total_loss = mask_loss + gender_loss + age_loss
 
             val_mask_losses.append(mask_loss.item())
             val_gender_losses.append(gender_loss.item())
@@ -203,12 +202,18 @@ def validation(
             val_losses.append(total_loss.item())
 
             mask_match = (mask_out.argmax(dim=-1) == mask_label).sum().item()
-            gender_match = (gen_out.argmax(dim=-1) == gender_label).sum().item()
+            gen_match = (gen_out.argmax(dim=-1) == gender_label).sum().item()
             age_match = (age_out.argmax(dim=-1) == age_label).sum().item()
             mask_matches.append(mask_match)
-            gender_matches.append(gender_match)
+            gender_matches.append(gen_match)
             age_matches.append(age_match)
-            accuracy_values.append((mask_match + gender_match + age_match) / 3)
+            accuracy_values.append((mask_match + gen_match + age_match) / 3)
+
+            labels = mask_label * 6 + gender_label * 3 + age_label
+            preds = mask_out.argmax(dim=-1) * 6 + gen_out.argmax(dim=-1) * 3 \
+                + age_out.argmax(dim=-1)
+            val_labels.extend(labels.cpu().numpy())  # labal,pred 저장
+            val_preds.extend(preds.cpu().numpy())
 
             if (batch+1) % 50 == 0:
                 outputs = str(mask_out[0].cpu().numpy()) + \
@@ -216,26 +221,31 @@ def validation(
                 targets = str(mask_label[0].cpu().numpy()) + \
                     str(gender_label[0].cpu().numpy()) + str(age_label[0].cpu().numpy())
                 example_images.append(
-                    wandb.Image(images[0], caption="Pred: {} Truth: {}".format(outputs, targets))
+                    wandb.Image(
+                        images[0], caption="Pred:{} Truth:{}".format(outputs, targets)
+                    )
                 )
                 wandb.log({"Image": example_images})
 
-    val_loss = np.sum(val_losses) / num_batches
-    val_mask_loss = np.sum(val_mask_losses) / num_batches
-    val_gender_loss = np.sum(val_gender_losses) / num_batches
-    val_age_loss = np.sum(val_age_losses) / num_batches
+    val_loss = np.sum(val_losses) / len(dataloader)
+    val_mask_loss = np.sum(val_mask_losses) / len(dataloader)
+    val_gender_loss = np.sum(val_gender_losses) / len(dataloader)
+    val_age_loss = np.sum(val_age_losses) / len(dataloader)
 
     val_acc = np.sum(accuracy_values) / len(dataloader.dataset)
     mask_acc = np.sum(mask_matches) / len(dataloader.dataset)
     gender_acc = np.sum(gender_matches) / len(dataloader.dataset)
     age_acc = np.sum(age_matches) / len(dataloader.dataset)
 
+    val_f1 = f1_score(y_true=val_labels, y_pred=val_preds, average='macro')
+
     print(
         f"Epoch[{epoch}]({len(dataloader)})\n"
-        f"valid loss {val_loss:4.4} | mask loss {val_mask_loss:4.4} "
-        f"| gender loss {val_gender_loss:4.4} | age loss {val_age_loss:4.4}"
+        f"valid loss {val_loss:4.2} | mask loss {val_mask_loss:4.2} "
+        f"| gender loss {val_gender_loss:4.2} | age loss {val_age_loss:4.2}"
         f"\nvalid acc {val_acc:4.2%} | mask acc {mask_acc:4.2%} "
         f"| gender acc {gender_acc:4.2%} | age acc {age_acc:4.2%}"
+        f"\nvalid f1 score {val_f1:.5}"
     )
     wandb.log({
         "valid_loss": val_loss,
@@ -246,13 +256,14 @@ def validation(
         "gender_acc": gender_acc,
         "valid_age_loss": val_age_loss,
         "age_acc": age_acc,
+        "val_f1_score": val_f1
     })
     torch.save(
         model.state_dict(),
-        f'{save_dir}/{epoch}-{val_loss:4.4}-{val_acc:4.2}.pth'
+        f'{save_dir}/{epoch}-{val_loss:4.2}-{val_acc:4.2}.pth'
         )
     print(
-        f'Saved Model to {save_dir}/{epoch}-{val_loss:4.4}-{val_acc:4.2}.pth'
+        f'Saved Model to {save_dir}/{epoch}-{val_loss:4.2}-{val_acc:4.2}.pth'
     )
 
 
@@ -313,10 +324,9 @@ def run_pytorch(configs) -> None:
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    model = MaskModelV3().to(device)
+    model = MaskModelV2().to(device)
 
-    loss_fn = get_bce_loss()
-    loss_fn2 = get_loss()
+    loss_fn = get_loss()
     optimizer = optim.Adam(model.parameters(), lr=configs['train']['lr'])
     lion = Lion(model.parameters(), lr=configs['train']['lr'])
     scheduler = None
@@ -342,9 +352,9 @@ def run_pytorch(configs) -> None:
         print(f'Epoch {e+1}\n-------------------------------')
         train(
             configs, train_loader, device,
-            model, [loss_fn, loss_fn2], optimizer, scheduler, e+1
+            model, loss_fn, optimizer, scheduler, e+1
         )
-        validation(save_dir, val_loader, device, model, [loss_fn, loss_fn2], e+1)
+        validation(save_dir, val_loader, device, model, loss_fn, e+1)
         print('\n')
     print('Done!')
 

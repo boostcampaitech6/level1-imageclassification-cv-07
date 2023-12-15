@@ -1,4 +1,4 @@
-model: 'MaskModelV3'
+model: 'MaskModelV2'
 task_name: "mask_classification"
 ckpt_path: './checkpoints'
 seed: 42

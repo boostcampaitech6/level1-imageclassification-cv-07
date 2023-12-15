@@ -33,9 +33,24 @@ class MaskModelV2(nn.Module):
             'tf_efficientnet_b4_ns', pretrained=True
         )
         num_in_features = self.model.get_classifier().out_features
-        self.fc_1 = nn.Linear(num_in_features, 3)
-        self.fc_2 = nn.Linear(num_in_features, 2)
-        self.fc_3 = nn.Linear(num_in_features, 3)
+        self.fc_1 = nn.Sequential(
+            nn.Linear(num_in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(512, 3)
+        )
+        self.fc_2 = nn.Sequential(
+            nn.Linear(num_in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(512, 2)
+        )
+        self.fc_3 = nn.Sequential(
+            nn.Linear(num_in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(512, 3)
+        )
         self.name = 'tf_efficientnet_b4_ns_maskv2'
 
     def forward(self, x):
