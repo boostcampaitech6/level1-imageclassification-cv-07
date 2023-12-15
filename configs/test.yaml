@@ -1,0 +1,12 @@
+task_name: "mask_classification"
+ckpt_path: './checkpoints/'
+seed: 42
+data:
+  csv_dir: "./data/eval/info.csv"
+  test_dir: "./data/eval/images"
+  valid_rate: 0.2
+  image_size: 380
+train:
+  batch_size: 32
+  lr: 0.001
+  epoch: 50

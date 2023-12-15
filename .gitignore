@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.DS_Store
+
+# Distribution / packaging
+build/
+eggs/
+.eggs/
+lib/
+lib64/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Data & Models
+*.h5
+*.tar
+*.tar.gz
+
+experiment.ipynb
+checkpoints/
+output/
+.ipynb_checkpoints/
+wandb/
+/data/
+results/
+/logs/
+.env
