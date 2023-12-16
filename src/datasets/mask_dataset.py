@@ -125,10 +125,12 @@ class TestDataset(Dataset):
         :return: 이미지 한장과 정답 값들
         :rtype: Tuple[Tensor]
         """
-        image = Image.open(self.image_paths[index])
+        image = np.array(
+            Image.open(self.image_paths[index]).convert('RGB'), dtype=np.float32
+        )
 
         if self.transform:
-            image = self.transform(image)
+            image = self.transform(image)['image']
         return image
 
 

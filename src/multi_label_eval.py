@@ -53,7 +53,7 @@ def predict(
             output1 = output1.argmax(dim=-1)
             output2 = output2.argmax(dim=-1)
             output3 = output3.argmax(dim=-1)
-            output = output1 + output2 + output3
+            output = (output1 * 6) + (output2 * 3) + output3
             predicts.extend(output.cpu().numpy())
     submission['ans'] = predicts
 

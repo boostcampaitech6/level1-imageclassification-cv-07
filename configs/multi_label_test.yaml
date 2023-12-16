@@ -1,5 +1,5 @@
 task_name: "mask_classification"
-ckpt_path: './checkpoints/'
+ckpt_path: './checkpoints/~'
 seed: 42
 data:
   csv_dir: "./data/eval/info.csv"
