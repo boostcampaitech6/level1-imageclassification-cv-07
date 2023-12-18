@@ -12,7 +12,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from datasets.mask_dataset import TestDataset
-from models.mask_model import MaskModelV2
+from models.mask_model import MultiLabelModel
 from utils.transform import TestAugmentation
 
 
@@ -94,7 +94,7 @@ def run_pytorch(configs) -> None:
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    model = MaskModelV2().to(device)
+    model = MultiLabelModel().to(device)
     model.load_state_dict(torch.load(configs['ckpt_path']))
     predict(test_loader, device, model, submission)
     print('Done!')

@@ -12,13 +12,12 @@ from sklearn.metrics import f1_score
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
-from lion_pytorch import Lion
 
-from datasets.mask_dataset import MaskDatasetV1
-from models.mask_model import MaskModelV2
+from datasets.mask_dataset import MultiLabelDataset
+from models.mask_model import MultiLabelModel
 from utils.transform import TrainAugmentation, TestAugmentation
 from utils.utils import get_lr
-from ops.losses import get_loss
+from ops.losses import get_cross_entropy_loss
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -111,8 +110,6 @@ def train(
             train_acc = (mask_acc + gender_acc + age_acc) / 3
 
             current_lr = get_lr(optimizer)
-            image = images[0, ...].detach().cpu().numpy()
-            image = image.transpose(1, 2, 0)
 
             print(
                 f"Epoch[{epoch}/{epochs}] ({batch + 1}/{len(dataloader)}) "
@@ -131,7 +128,7 @@ def train(
                 "gender_acc": gender_acc,
                 "age_loss": age_loss,
                 "age_acc": age_acc,
-                'train_rgb': wandb.Image(image, caption='Input-image')
+                'train_rgb': wandb.Image(images[0], caption=f'{targets[0]}')
             })
 
             loss_value = 0
@@ -216,13 +213,14 @@ def validation(
             val_preds.extend(preds.cpu().numpy())
 
             if (batch+1) % 50 == 0:
-                outputs = str(mask_out[0].cpu().numpy()) + \
-                    str(gen_out[0].cpu().numpy()) + str(age_out[0].cpu().numpy())
-                targets = str(mask_label[0].cpu().numpy()) + \
-                    str(gender_label[0].cpu().numpy()) + str(age_label[0].cpu().numpy())
+                idx = random.randint(0, len(mask_out))
+                outputs = str(mask_out[idx].cpu().numpy()) + \
+                    str(gen_out[idx].cpu().numpy()) + str(age_out[idx].cpu().numpy())
+                targets = str(mask_label[idx].cpu().numpy()) + \
+                    str(gender_label[idx].cpu().numpy()) + str(age_label[idx].cpu().numpy())
                 example_images.append(
                     wandb.Image(
-                        images[0], caption="Pred:{} Truth:{}".format(outputs, targets)
+                        images[idx], caption="Pred:{} Truth:{}".format(outputs, targets)
                     )
                 )
                 wandb.log({"Image": example_images})
@@ -288,7 +286,7 @@ def run_pytorch(configs) -> None:
     )
     image_size = configs['data']['image_size']
     train_augmentation = TrainAugmentation(resize=[image_size, image_size])
-    train_data = MaskDatasetV1(
+    train_data = MultiLabelDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
         transform=train_augmentation,
@@ -297,7 +295,7 @@ def run_pytorch(configs) -> None:
     )
 
     valid_augmentation = TestAugmentation(resize=[image_size, image_size])
-    val_data = MaskDatasetV1(
+    val_data = MultiLabelDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
         transform=valid_augmentation,
@@ -310,25 +308,22 @@ def run_pytorch(configs) -> None:
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=True,
-        pin_memory=True,
-        drop_last=True
+        pin_memory=True
     )
     val_loader = DataLoader(
         val_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=False,
-        pin_memory=True,
-        drop_last=True
+        pin_memory=True
     )
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    model = MaskModelV2().to(device)
+    model = MultiLabelModel().to(device)
 
-    loss_fn = get_loss()
+    loss_fn = get_cross_entropy_loss()
     optimizer = optim.Adam(model.parameters(), lr=configs['train']['lr'])
-    lion = Lion(model.parameters(), lr=configs['train']['lr'])
     scheduler = None
 
     save_dir = os.path.join(configs['ckpt_path'], str(model.name))

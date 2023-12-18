@@ -40,6 +40,8 @@ class TrainAugmentation:
         width, height = resize
         self.transform = A.Compose(
             [
+                A.HorizontalFlip(p=0.5),
+                A.ColorJitter(p=0.2),
                 A.Resize(width, height),
                 A.Normalize(mean=mean, std=std),
                 ToTensorV2(),

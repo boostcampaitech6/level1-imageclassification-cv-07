@@ -2,31 +2,7 @@ import timm
 from torch import nn
 
 
-class MaskModelV1(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.model = timm.create_model(
-            'tf_efficientnet_b4_ns', pretrained=True
-        )
-        num_in_features = self.model.get_classifier().out_features
-        self.fc = nn.Linear(
-            in_features=num_in_features, out_features=8, bias=False
-        )
-        self.fc_1 = nn.Linear(8, 3)
-        self.fc_2 = nn.Linear(8, 2)
-        self.fc_3 = nn.Linear(8, 3)
-        self.name = 'tf_efficientnet_b4_ns_maskv1'
-
-    def forward(self, x):
-        x = self.model(x)
-        x = self.fc(x)
-        output1 = self.fc_1(x)
-        output2 = self.fc_2(x)
-        output3 = self.fc_3(x)
-        return output1, output2, output3
-
-
-class MaskModelV2(nn.Module):
+class MultiLabelModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.model = timm.create_model(
@@ -35,23 +11,26 @@ class MaskModelV2(nn.Module):
         num_in_features = self.model.get_classifier().out_features
         self.fc_1 = nn.Sequential(
             nn.Linear(num_in_features, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Dropout(p=0.5),
             nn.Linear(512, 3)
         )
         self.fc_2 = nn.Sequential(
             nn.Linear(num_in_features, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Dropout(p=0.5),
             nn.Linear(512, 2)
         )
         self.fc_3 = nn.Sequential(
             nn.Linear(num_in_features, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Dropout(p=0.5),
             nn.Linear(512, 3)
         )
-        self.name = 'tf_efficientnet_b4_ns_maskv2'
+        self.name = 'tf_efficientnet_b4_ns_mask_multilabel'
 
     def forward(self, x):
         x = self.model(x)
@@ -61,65 +40,14 @@ class MaskModelV2(nn.Module):
         return output1, output2, output3
 
 
-class MaskModelV3(nn.Module):
+class SingleLabelModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.model = timm.create_model(
-            'tf_efficientnet_b4_ns', pretrained=True
+            'tf_efficientnet_b4_ns', pretrained=True, num_classes=18
         )
-        num_in_features = self.model.get_classifier().out_features
-        self.fc = nn.Sequential(
-            nn.Linear(num_in_features, 512),
-            nn.Linear(512, 256),
-            nn.Linear(256, 128)
-
-        )
-        self.fc_1 = nn.Linear(128, 3)
-        self.fc_2 = nn.Linear(128, 2)
-        self.fc_3 = nn.Linear(128, 3)
-        self.name = 'tf_efficientnet_b4_ns_maskv3'
+        self.name = 'tf_efficientnet_b4_ns_mask_singlelabel'
 
     def forward(self, x):
         x = self.model(x)
-        x = self.fc(x)
-        output1 = self.fc_1(x)
-        output2 = self.fc_2(x)
-        output3 = self.fc_3(x)
-        return output1, output2, output3
-
-
-class MaskModelV4(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.model = timm.create_model(
-            'tf_efficientnet_b4_ns', pretrained=True
-        )
-        num_in_features = self.model.get_classifier().out_features
-        self.fc = nn.Sequential(
-            nn.Linear(num_in_features, 512),
-            nn.Linear(512, 256),
-            nn.Linear(256, 128),
-            nn.Linear(128, 18),
-        )
-        self.name = 'tf_efficientnet_b4_ns_maskv4'
-
-    def forward(self, x):
-        x = self.model(x)
-        x = self.fc(x)
-        return x
-
-
-class MaskModelV5(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.model = timm.create_model(
-            'tf_efficientnet_b4_ns', pretrained=True
-        )
-        num_in_features = self.model.get_classifier().out_features
-        self.fc = nn.Linear(num_in_features, 8)
-        self.name = 'tf_efficientnet_b4_ns_maskv4'
-
-    def forward(self, x):
-        x = self.model(x)
-        x = self.fc(x)
         return x

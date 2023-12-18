@@ -1,5 +1,6 @@
 import argparse
 import random
+import os
 
 from omegaconf import OmegaConf
 import numpy as np
@@ -10,8 +11,8 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from datasets.mask_dataset import MaskDatasetV1
-from models.mask_model import MaskModelV3
+from datasets.mask_dataset import TestDataset
+from models.mask_model import SingleLabelModel
 from utils.transform import TestAugmentation
 
 
@@ -48,14 +49,23 @@ def predict(
         for images in tqdm(dataloader):
             images = images.to(device)
 
-            output1, output2, output3 = model(images)
-            output1 = output1.argmax(dim=-1)
-            output2 = output2.argmax(dim=-1)
-            output3 = output3.argmax(dim=-1)
-            output = output1 + output2 + output3
+            output = model(images)
+            output = output.argmax(dim=-1)
             predicts.extend(output.cpu().numpy())
     submission['ans'] = predicts
-    submission.to_csv()
+
+    if not os.path.exists(os.path.join('results', model.name)):
+        os.makedirs(os.path.join('results', model.name))
+    i = 0
+    while True:
+        version = 'submission_v' + str(i) + '.csv'
+        if os.path.exists(os.path.join('results', model.name, version)):
+            i += 1
+            continue
+        else:
+            save_path = os.path.join('results', model.name, version)
+            break
+    submission.to_csv(save_path, index=False)
 
 
 def run_pytorch(configs) -> None:
@@ -64,11 +74,12 @@ def run_pytorch(configs) -> None:
     :param configs: 학습에 사용할 config들
     :type configs: dict
     """
-    pd.read_csv(configs['data']['csv_dir'])
+    submission = pd.read_csv(configs['data']['csv_dir'])
     image_size = configs['data']['image_size']
+    image_paths = [os.path.join(configs['data']['test_dir'], img_id) for img_id in submission.ImageID]
     test_augmentation = TestAugmentation(resize=[image_size, image_size])
-    test_data = MaskDatasetV1(
-        image_dir=configs['data']['test_dir'],
+    test_data = TestDataset(
+        image_paths=image_paths,
         transform=test_augmentation,
         mode='test',
     )
@@ -80,16 +91,16 @@ def run_pytorch(configs) -> None:
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    model = MaskModelV3().to(device)
+    model = SingleLabelModel().to(device)
     model.load_state_dict(torch.load(configs['ckpt_path']))
-    predict(test_loader, device, model)
+    predict(test_loader, device, model, submission)
     print('Done!')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--config", type=str, default="test.yaml"
+        "--config", type=str, default="configs/test.yaml"
     )
     args = parser.parse_args()
     with open(args.config, 'r') as f:

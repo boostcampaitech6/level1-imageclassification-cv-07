@@ -7,16 +7,17 @@ from typing import Dict
 import numpy as np
 from omegaconf import OmegaConf
 import wandb
+from sklearn.metrics import f1_score
 
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
 
-from datasets.mask_dataset import MaskDatasetV2
-from models.mask_model import MaskModelV4
+from datasets.mask_dataset import SingleLabelDataset
+from models.mask_model import SingleLabelModel
 from utils.transform import TrainAugmentation, TestAugmentation
 from utils.utils import get_lr
-from ops.losses import get_loss
+from ops.losses import get_cross_entropy_loss
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -38,7 +39,8 @@ def seed_everything(seed):
 def train(
     configs: Dict,
     dataloader: DataLoader,
-    device: str, model: nn.Module,
+    device: str,
+    model: nn.Module,
     loss_fn: nn.Module,
     optimizer: _Optimizer,
     scheduler: _Scheduler,
@@ -60,13 +62,13 @@ def train(
     model.train()
 
     loss_value = 0
-    accuracy_values = []
+    accuracy = 0
 
     epochs = configs['train']['epoch']
 
     for batch, (images, targets) in enumerate(dataloader):
         images = images.to(device)
-        targets = targets.float().to(device)
+        targets = targets.long().to(device)
         outputs = model(images)
         loss = loss_fn(outputs, targets)
 
@@ -75,16 +77,13 @@ def train(
         optimizer.step()
 
         loss_value += loss.item()
-        outputs = outputs > 0.5
-        accuracy = (outputs == targets).float().mean().item()
-        accuracy_values.append(accuracy)
+        outputs = outputs.argmax(dim=-1)
+        accuracy += (outputs == targets).sum().item()
 
         if (batch+1) % 50 == 0:
             train_loss = loss_value / 50
-            train_acc = np.mean(accuracy_values)
+            train_acc = accuracy / configs['train']['batch_size'] / 50
             current_lr = get_lr(optimizer)
-            image = images[0, ...].detach().cpu().numpy()
-            image = image.transpose(1, 2, 0)
 
             print(
                 f"Epoch[{epoch}/{epochs}]({batch + 1}/{len(dataloader)}) "
@@ -94,12 +93,11 @@ def train(
             wandb.log({
                 "train_loss": train_loss,
                 "train_acc": train_acc,
-                'train_rgb': wandb.Image(image, caption='Input-image')
+                'train_rgb': wandb.Image(images[0], caption=f'{targets[0]}')
             })
 
             loss_value = 0
-            train_acc = 0
-            accuracy_values = []
+            accuracy = 0
 
     if scheduler is not None:
         scheduler.step()
@@ -124,49 +122,55 @@ def validation(
     :param loss_fn: 훈련에 사용되는 오차 함수
     :type loss_fn: nn.Module
     """
-    num_batches = len(dataloader)
     model.eval()
 
-    valid_loss = 0
-    accuracy_values = []
+    valid_loss = []
+    valid_acc = []
+    val_labels = []
+    val_preds = []
     example_images = []
 
     with torch.no_grad():
         for batch, (images, targets) in enumerate(dataloader):
             images = images.to(device)
-            targets = targets.float().to(device)
+            targets = targets.long().to(device)
             outputs = model(images)
             loss = loss_fn(outputs, targets)
 
-            valid_loss += loss.item()
+            valid_loss.append(loss.item())
 
-            outputs = outputs > 0.5
-            accuracy = (outputs == targets).float().mean().item()
-            accuracy_values.append(accuracy)
+            outputs = outputs.argmax(dim=-1)
+            val_acc_item = (outputs == targets).sum().item()
+            valid_acc.append(val_acc_item)
+            val_labels.extend(targets.cpu().numpy())  # labal,pred 저장
+            val_preds.extend(outputs.cpu().numpy())
             if batch % 50 == 0:
-                outputs = str(outputs[0].cpu().numpy())
-                targets = str(targets[0].cpu().numpy())
+                idx = random.randint(0, len(outputs))
+                outputs = str(outputs[idx].cpu().numpy())
+                targets = str(targets[idx].cpu().numpy())
                 example_images.append(wandb.Image(
-                    images[0], caption="Pred: {} Truth: {}".format(outputs, targets)))
+                    images[idx], caption="Pred: {} Truth: {}".format(outputs, targets)))
 
             wandb.log({"Image": example_images})
-
-    valid_loss /= num_batches
-    valid_acc = np.mean(accuracy_values)
+    val_loss = np.sum(valid_loss) / len(dataloader)
+    val_acc = np.sum(valid_acc) / len(dataloader.dataset)
+    val_f1 = f1_score(y_true=val_labels, y_pred=val_preds, average='macro')
     print(
         f"Epoch[{epoch}]({len(dataloader)})"
-        f"valid loss {valid_loss:4.4} | valid acc {valid_acc:4.2%}"
+        f"valid loss {val_loss:4.4} | valid acc {val_acc:4.2%}"
+        f"\nvalid f1 score {val_f1:.5}"
     )
     wandb.log({
-        "valid_loss": valid_loss,
-        "valid_acc": valid_acc,
+        "valid_loss": val_loss,
+        "valid_acc": val_acc,
+        "val_f1_score": val_f1
     })
     torch.save(
         model.state_dict(),
-        f'{save_dir}/{epoch}-{valid_loss:4.4}-{valid_acc:4.2}.pth'
+        f'{save_dir}/{epoch}-{val_loss:4.4}-{val_acc:4.2}.pth'
         )
     print(
-        f'Saved Model State to {save_dir}/{epoch}-{valid_loss:4.4}-{valid_acc:4.2}.pth'
+        f'Saved Model to {save_dir}/{epoch}-{val_loss:4.4}-{val_acc:4.2}.pth'
     )
 
 
@@ -190,16 +194,17 @@ def run_pytorch(configs) -> None:
         }
     )
     train_augmentation = TrainAugmentation(resize=[380, 380])
-    train_data = MaskDatasetV2(
+    train_data = SingleLabelDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
         transform=train_augmentation,
         mode='train',
         valid_rate=configs['data']['valid_rate']
     )
-    
+    print(train_data[0])
+
     valid_augmentation = TestAugmentation(resize=[380, 380])
-    val_data = MaskDatasetV2(
+    val_data = SingleLabelDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
         transform=valid_augmentation,
@@ -213,7 +218,6 @@ def run_pytorch(configs) -> None:
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=True,
         pin_memory=True,
-        drop_last=True
     )
     val_loader = DataLoader(
         val_data,
@@ -221,18 +225,17 @@ def run_pytorch(configs) -> None:
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=False,
         pin_memory=True,
-        drop_last=True
     )
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    model = MaskModelV4().to(device)
+    model = SingleLabelModel().to(device)
 
-    loss_fn = get_loss()
+    loss_fn = get_cross_entropy_loss()
     optimizer = optim.Adam(model.parameters(), lr=configs['train']['lr'])
     scheduler = None
 
-    save_dir = os.path.join(configs['ckpt_path'], str(model.__class__.__name__))
+    save_dir = os.path.join(configs['ckpt_path'], str(model.name))
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     i = 0

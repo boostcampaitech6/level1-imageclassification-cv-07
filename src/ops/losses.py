@@ -5,7 +5,7 @@ def get_multi_loss():
     return nn.MultiLabelSoftMarginLoss()
 
 
-def get_loss():
+def get_cross_entropy_loss():
     return nn.CrossEntropyLoss()
 
 
