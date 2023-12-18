@@ -217,14 +217,14 @@ def run_pytorch(configs) -> None:
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=True,
-        pin_memory=True,
+        #pin_memory=True,
     )
     val_loader = DataLoader(
         val_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=False,
-        pin_memory=True,
+        #pin_memory=True,
     )
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
