@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 
 from datasets.datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
-from utils.utils import get_lr, mixup_aug, mixuploss
+from utils.utils import get_lr, mixup_aug, mixuploss, cutmix_aug, cutmixloss
 from ops.losses import get_focal_loss, get_cross_entropy_loss
 from ops.optim import get_adam
 
@@ -35,26 +35,6 @@ def seed_everything(seed):
     np.random.seed(seed)
     random.seed(seed)
 
-def rand_bbox(size, lam):
-    W = size[2]
-    H = size[3]
-    cut_rat = np.sqrt(1. - lam)
-    Wa = W * cut_rat #np.int was delet numpy 1.24
-    Ha = H * cut_rat
-    cut_w = Wa.astype(np.int64)
-    cut_h = Ha.astype(np.int64)
-
-    # uniform
-    cx = np.random.randint(W)
-    cy = np.random.randint(H)
-
-    bbx1 = np.clip(cx - cut_w // 2, 0, W)
-    bby1 = np.clip(cy - cut_h // 2, 0, H)
-    bbx2 = np.clip(cx + cut_w // 2, 0, W)
-    bby2 = np.clip(cy + cut_h // 2, 0, H)
-
-    return bbx1, bby1, bbx2, bby2
-
 def train(
     configs: Dict,
     dataloader: DataLoader,
@@ -65,6 +45,7 @@ def train(
     scheduler: _Scheduler,
     epoch: int,
     mixup: bool,
+    cutmix: bool,
 ) -> None:
     """데이터셋으로 뉴럴 네트워크를 훈련합니다.
 
@@ -100,24 +81,17 @@ def train(
         else:
             outputs = model(images)
             loss = loss_fn(outputs, targets)
-        
-        #cutmix
-        #criterion = nn.CrossEntropyLoss().cuda()
-        lam = np.random.beta(512, 384) #hyperparameter (image size)
-        rand_index = torch.randperm(images.size()[0]).cuda()
-        target_a = targets
-        target_b = targets[rand_index]
-        '''
-        bbx1 = 0 
-        bby1 = 0
-        bbx2 = 256
-        bby2 = 384
-        '''
-        bbx1, bby1, bbx2, bby2 = rand_bbox(images.size(), lam)
-        images[:, :, bbx1:bbx2, bby1:bby2] = images[rand_index, :, bbx1:bbx2, bby1:bby2]
-        lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (images.size()[-1] * images.size()[-2]))
-        output = model(images)
-        loss = loss_fn(output, target_a) * lam + loss_fn(output, target_b) * (1. - lam)
+            
+        if cutmix and (batch + 1) % 3 == 0:
+            images, target_a, target_b, lam = cutmix_aug(images, targets)
+            outputs = model(images)
+            loss = cutmixloss(
+                loss_fn, pred=outputs, target_a=target_a,
+                target_b=target_b, lam=lam
+            )
+        else:
+            outputs = model(images)
+            loss = loss_fn(outputs, targets)
         
         optimizer.zero_grad()
         scaler.scale(loss).backward()
@@ -314,7 +288,7 @@ def run_pytorch(configs) -> None:
         print(f'Epoch {e+1}\n-------------------------------')
         train(
             configs, train_loader, device, model, loss_fn,
-            optimizer, scheduler, e+1, configs['train']['mixup']
+            optimizer, scheduler, e+1, configs['train']['mixup'], configs['train']['cutmix']
         )
         val_loss = validation(
             val_loader, save_dir, device, model, loss_fn, e+1
