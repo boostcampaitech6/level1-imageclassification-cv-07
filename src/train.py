@@ -145,7 +145,7 @@ def validation(
             val_labels.extend(targets.cpu().numpy())  # labal,pred 저장
             val_preds.extend(outputs.cpu().numpy())
             if batch % 50 == 0:
-                idx = random.randint(0, len(outputs))
+                idx = random.randint(0, outputs.size(0))
                 outputs = str(outputs[idx].cpu().numpy())
                 targets = str(targets[idx].cpu().numpy())
                 example_images.append(wandb.Image(
