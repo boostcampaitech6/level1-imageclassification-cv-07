@@ -13,11 +13,12 @@ import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
 
-from datasets.mask_dataset import SingleLabelDataset
+from datasets.datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
-from utils.transform import TrainAugmentation, TestAugmentation
+from utils.transform import TrainAugmentation
 from utils.utils import get_lr
 from ops.losses import get_cross_entropy_loss
+from ops.optim import get_adam
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -193,24 +194,15 @@ def run_pytorch(configs) -> None:
             'val_rate': configs['data']['valid_rate']
         }
     )
-    train_augmentation = TrainAugmentation(resize=[380, 380])
-    train_data = SingleLabelDataset(
+    width, height = map(int, configs['data']['image_size'].split(','))
+    train_transforms = TrainAugmentation(resize=[380, 380])
+    dataset = MaskSplitByProfileDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
-        transform=train_augmentation,
-        mode='train',
         valid_rate=configs['data']['valid_rate']
     )
-    print(train_data[0])
-
-    valid_augmentation = TestAugmentation(resize=[380, 380])
-    val_data = SingleLabelDataset(
-        image_dir=configs['data']['train_dir'],
-        csv_path=configs['data']['csv_dir'],
-        transform=valid_augmentation,
-        mode='valid',
-        valid_rate=configs['data']['valid_rate']
-    )
+    dataset.set_transform(train_transforms)
+    train_data, val_data = dataset.split_dataset()
 
     train_loader = DataLoader(
         train_data,
@@ -232,7 +224,7 @@ def run_pytorch(configs) -> None:
     model = SingleLabelModel().to(device)
 
     loss_fn = get_cross_entropy_loss()
-    optimizer = optim.Adam(model.parameters(), lr=configs['train']['lr'])
+    optimizer = get_adam(model, configs)
     scheduler = None
 
     save_dir = os.path.join(configs['ckpt_path'], str(model.name))
