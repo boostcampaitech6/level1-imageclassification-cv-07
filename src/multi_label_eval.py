@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 
 from datasets.mask_dataset import TestDataset
 from models.mask_model import MultiLabelModel
-from utils.transform import TestAugmentation
 
 
 def seed_everything(seed):
@@ -30,7 +29,8 @@ def predict(
     dataloader: DataLoader,
     device: str,
     model: nn.Module,
-    submission: pd.DataFrame
+    submission: pd.DataFrame,
+    save_path: os.PathLike
 ) -> None:
     """데이터셋으로 뉴럴 네트워크의 성능을 검증합니다.
 
@@ -56,6 +56,33 @@ def predict(
             output = (output1 * 6) + (output2 * 3) + output3
             predicts.extend(output.cpu().numpy())
     submission['ans'] = predicts
+    submission.to_csv(save_path, index=False)
+
+
+def run_pytorch(configs) -> None:
+    """추론 파이토치 파이프라인
+
+    :param configs: 학습에 사용할 config들
+    :type configs: dict
+    """
+    submission = pd.read_csv(configs['data']['csv_dir'])
+    width, height = map(int, configs['data']['image_size'].split(','))
+    image_paths = [os.path.join(configs['data']['test_dir'], img_id) for img_id in submission.ImageID]
+    test_data = TestDataset(
+        img_paths=image_paths,
+        width=width,
+        height=height
+    )
+
+    test_loader = DataLoader(
+        test_data,
+        shuffle=False
+    )
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    model = MultiLabelModel().to(device)
+    model.load_state_dict(torch.load(configs['ckpt_path']))
 
     if not os.path.exists(os.path.join('results', model.name)):
         os.makedirs(os.path.join('results', model.name))
@@ -68,35 +95,8 @@ def predict(
         else:
             save_path = os.path.join('results', model.name, version)
             break
-    submission.to_csv(save_path, index=False)
 
-
-def run_pytorch(configs) -> None:
-    """추론 파이토치 파이프라인
-
-    :param configs: 학습에 사용할 config들
-    :type configs: dict
-    """
-    submission = pd.read_csv(configs['data']['csv_dir'])
-    image_size = configs['data']['image_size']
-    image_paths = [os.path.join(configs['data']['test_dir'], img_id) for img_id in submission.ImageID]
-    test_augmentation = TestAugmentation(resize=[image_size, image_size])
-    test_data = TestDataset(
-        image_paths=image_paths,
-        transform=test_augmentation,
-        mode='test',
-    )
-
-    test_loader = DataLoader(
-        test_data,
-        shuffle=False
-    )
-
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    model = MultiLabelModel().to(device)
-    model.load_state_dict(torch.load(configs['ckpt_path']))
-    predict(test_loader, device, model, submission)
+    predict(test_loader, device, model, submission, save_path)
     print('Done!')
 
 
