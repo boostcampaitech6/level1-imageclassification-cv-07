@@ -6,7 +6,7 @@ data:
   train_dir: "./data/train/images"
   csv_dir: "./data/train/train.csv"
   valid_rate: 0.2
-  image_size: '380, 380'
+  image_size: '512, 384'
 train:
   batch_size: 32
   lr: 0.0001
