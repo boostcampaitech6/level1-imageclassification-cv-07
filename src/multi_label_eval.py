@@ -11,14 +11,14 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from datasets.mask_dataset import TestDataset
+from datasets.datasets import TestDataset
 from models.mask_model import MultiLabelModel
 
 
 def seed_everything(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # if use multi-GPU
+    torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
@@ -65,9 +65,12 @@ def run_pytorch(configs) -> None:
     :param configs: 학습에 사용할 config들
     :type configs: dict
     """
+    test_dir = configs['data']['test_dir']
     submission = pd.read_csv(configs['data']['csv_dir'])
     width, height = map(int, configs['data']['image_size'].split(','))
-    image_paths = [os.path.join(configs['data']['test_dir'], img_id) for img_id in submission.ImageID]
+    image_paths = [
+        os.path.join(test_dir, img_id) for img_id in submission.ImageID
+    ]
     test_data = TestDataset(
         img_paths=image_paths,
         width=width,

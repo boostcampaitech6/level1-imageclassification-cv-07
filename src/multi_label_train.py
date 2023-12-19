@@ -15,7 +15,6 @@ from torch.utils.data import DataLoader
 
 from datasets.datasets import MultiLabelMaskSplitByProfileDataset
 from models.mask_model import MultiLabelModel
-from utils.transform import TrainAugmentation
 from utils.utils import get_lr
 from ops.losses import get_cross_entropy_loss
 from ops.optim import get_adam
@@ -210,18 +209,21 @@ def validation(
             labels = mask_label * 6 + gender_label * 3 + age_label
             preds = mask_out.argmax(dim=-1) * 6 + gen_out.argmax(dim=-1) * 3 \
                 + age_out.argmax(dim=-1)
-            val_labels.extend(labels.cpu().numpy())  # labal,pred 저장
+            val_labels.extend(labels.cpu().numpy())
             val_preds.extend(preds.cpu().numpy())
 
             if (batch+1) % 50 == 0:
                 idx = random.randint(0, mask_out.size(0)-1)
                 outputs = str(mask_out[idx].cpu().numpy()) + \
-                    str(gen_out[idx].cpu().numpy()) + str(age_out[idx].cpu().numpy())
+                    str(gen_out[idx].cpu().numpy()) + \
+                    str(age_out[idx].cpu().numpy())
                 targets = str(mask_label[idx].cpu().numpy()) + \
-                    str(gender_label[idx].cpu().numpy()) + str(age_label[idx].cpu().numpy())
+                    str(gender_label[idx].cpu().numpy()) +\
+                    str(age_label[idx].cpu().numpy())
                 example_images.append(
                     wandb.Image(
-                        images[idx], caption="Pred:{} Truth:{}".format(outputs, targets)
+                        images[idx],
+                        caption="Pred:{} Truth:{}".format(outputs, targets)
                     )
                 )
                 wandb.log({"Image": example_images})
@@ -264,7 +266,7 @@ def validation(
     print(
         f'Saved Model to {save_dir}/{epoch}-{val_loss:4.2}-{val_acc:4.2}.pth'
     )
-    
+
     return val_loss
 
 
@@ -353,7 +355,9 @@ def run_pytorch(configs) -> None:
             configs, train_loader, device,
             model, loss_fn, optimizer, scheduler, e+1
         )
-        val_loss = validation(save_dir, val_loader, device, model, loss_fn, e+1)
+        val_loss = validation(
+            save_dir, val_loader, device, model, loss_fn, e+1
+        )
         if val_loss < best_loss:
             best_loss = val_loss
             cnt = 0
