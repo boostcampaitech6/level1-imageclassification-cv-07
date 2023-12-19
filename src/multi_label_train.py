@@ -264,6 +264,8 @@ def validation(
     print(
         f'Saved Model to {save_dir}/{epoch}-{val_loss:4.2}-{val_acc:4.2}.pth'
     )
+    
+    return val_loss
 
 
 def run_pytorch(configs) -> None:
@@ -286,7 +288,15 @@ def run_pytorch(configs) -> None:
         }
     )
     width, height = map(int, configs['data']['image_size'].split(','))
-    train_transforms = TrainAugmentation(resize=[width, height])
+    # train_transforms = TrainAugmentation(resize=[width, height])
+    import albumentations as A
+    mean = [0.548, 0.504, 0.479]
+    std = [0.237, 0.247, 0.246]
+    train_transforms = A.Compose([
+        A.Resize(width, height),
+        A.Normalize(mean=mean, std=std),
+        A.pytorch.ToTensorV2()
+    ])
     dataset = MultiLabelMaskSplitByProfileDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
@@ -335,13 +345,23 @@ def run_pytorch(configs) -> None:
             os.makedirs(save_dir)
             break
 
+    best_loss = 100
+    cnt = 0
     for e in range(configs['train']['epoch']):
         print(f'Epoch {e+1}\n-------------------------------')
         train(
             configs, train_loader, device,
             model, loss_fn, optimizer, scheduler, e+1
         )
-        validation(save_dir, val_loader, device, model, loss_fn, e+1)
+        val_loss = validation(save_dir, val_loader, device, model, loss_fn, e+1)
+        if val_loss < best_loss:
+            best_loss = val_loss
+            cnt = 0
+        else:
+            cnt += 1
+        if cnt == configs['train']['early_patience']:
+            print('Early Stopping!')
+            break
         print('\n')
     print('Done!')
 

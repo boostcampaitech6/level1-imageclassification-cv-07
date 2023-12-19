@@ -111,7 +111,7 @@ def validation(
     model: nn.Module,
     loss_fn: nn.Module,
     epoch: int
-) -> None:
+) -> float:
     """데이터셋으로 뉴럴 네트워크의 성능을 검증합니다.
 
     :param dataloader: 파이토치 데이터로더
@@ -174,7 +174,7 @@ def validation(
     print(
         f'Saved Model to {save_dir}/{epoch}-{val_loss:4.4}-{val_acc:4.2}.pth'
     )
-    #early_stopping
+    return valid_loss
 
 
 def run_pytorch(configs) -> None:
@@ -206,16 +206,19 @@ def run_pytorch(configs) -> None:
         A.Normalize(mean=mean, std=std),
         A.pytorch.ToTensorV2()
     ])
+    valid_transforms = A.Compose([
+        A.Resize(width, height),
+        A.Normalize(mean=mean, std=std),
+        A.pytorch.ToTensorV2()
+    ])
     dataset = MaskSplitByProfileDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
         valid_rate=configs['data']['valid_rate']
     )
-    dataset.set_transform(train_transforms)
+    dataset.set_transform(train_transforms, valid_transforms)
     train_data, val_data = dataset.split_dataset()
 
-    print(train_data[0])
-    print(train_data[0][0].shape)
     train_loader = DataLoader(
         train_data,
         batch_size=configs['train']['batch_size'],
@@ -256,13 +259,23 @@ def run_pytorch(configs) -> None:
             os.makedirs(save_dir)
             break
 
+    best_loss = 100
+    cnt = 0
     for e in range(configs['train']['epoch']):
         print(f'Epoch {e+1}\n-------------------------------')
         train(
             configs, train_loader,
             device, model, loss_fn, optimizer, scheduler, e+1
         )
-        validation(val_loader, save_dir, device, model, loss_fn, e+1)
+        val_loss = validation(val_loader, save_dir, device, model, loss_fn, e+1)
+        if val_loss < best_loss:
+            best_loss = val_loss
+            cnt = 0
+        else:
+            cnt += 1
+        if cnt == configs['train']['early_patience']:
+            print('Early Stopping!')
+            break
         print('\n')
     print('Done!')
 

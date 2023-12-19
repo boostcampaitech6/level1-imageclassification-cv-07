@@ -483,7 +483,7 @@ class MaskSplitByProfileDataset(Dataset):
         image = np.array(image)
         if self.transform:
             if isinstance(self.transform, A.Compose):
-                image = self.transform(image)['image']
+                image = self.transform(image=image)['image']
 
         return image, target
 
@@ -627,7 +627,7 @@ class MultiLabelMaskSplitByProfileDataset(Dataset):
                     self.gender_labels.append(gender_label)
                     self.age_labels.append(age_label)
                     self.total_labels.append(
-                        self.encode_multi_class(mask_label, gender_label, age_label)
+                        [mask_label, gender_label, age_label]
                     )
 
                     self.indices[phase].append(cnt)
@@ -644,6 +644,9 @@ class MultiLabelMaskSplitByProfileDataset(Dataset):
     def split_dataset(self) -> List[Subset]:
         return [Subset(self, indices) for phase, indices in self.indices.items()]
 
+    def set_transform(self, transform):
+        self.transform = transform
+
     def __getitem__(self, index):
         assert self.transform is not None
 
@@ -656,7 +659,7 @@ class MultiLabelMaskSplitByProfileDataset(Dataset):
         image = np.array(image)
         if self.transform:
             if isinstance(self.transform, A.Compose):
-                image = self.transform(image)['image']
+                image = self.transform(image=image)['image']
 
         return image, target
 
@@ -677,19 +680,6 @@ class MultiLabelMaskSplitByProfileDataset(Dataset):
         return Image.open(image_path).convert('RGB')
 
     @staticmethod
-    def encode_multi_class(mask_label, gender_label, age_label) -> int:
-        return mask_label * 6 + gender_label * 3 + age_label
-
-    @staticmethod
-    def decode_multi_class(
-        multi_class_label,
-    ) -> Tuple[MaskLabels, GenderLabels, AgeLabels]:
-        mask_label = (multi_class_label // 6) % 3
-        gender_label = (multi_class_label // 3) % 2
-        age_label = multi_class_label % 3
-        return mask_label, gender_label, age_label
-
-    @staticmethod
     def denormalize_image(image, mean, std):
         img_cp = image.copy()
         img_cp *= std
@@ -701,22 +691,22 @@ class MultiLabelMaskSplitByProfileDataset(Dataset):
 
 class TestDataset(Dataset):
     def __init__(
-        self, img_paths, resize, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)
+        self, img_paths, width, height, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)
     ):
         self.img_paths = img_paths
         self.transform = A.Compose(
             [
-                A.Resize(resize, Image.BILINEAR),
-                ToTensorV2(),
+                A.Resize(width, height),
                 A.Normalize(mean=mean, std=std),
+                ToTensorV2(),
             ]
         )
 
     def __getitem__(self, index):
         image = Image.open(self.img_paths[index])
-
+        image = np.array(image)
         if self.transform:
-            image = self.transform(image)
+            image = self.transform(image=image)['image']
         return image
 
     def __len__(self):
