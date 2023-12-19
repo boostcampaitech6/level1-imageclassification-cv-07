@@ -4,4 +4,4 @@ seed: 42
 data:
   csv_dir: "./data/eval/info.csv"
   test_dir: "./data/eval/images"
-  image_size: '380, 380'
+  image_size: '512, 384'
