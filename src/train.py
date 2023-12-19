@@ -17,7 +17,7 @@ from datasets.datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
 from utils.transform import TrainAugmentation
 from utils.utils import get_lr
-from ops.losses import get_cross_entropy_loss
+from ops.losses import get_focal_loss, get_cross_entropy_loss
 from ops.optim import get_adam
 
 import warnings
@@ -36,6 +36,25 @@ def seed_everything(seed):
     np.random.seed(seed)
     random.seed(seed)
 
+def rand_bbox(size, lam):
+    W = size[2]
+    H = size[3]
+    cut_rat = np.sqrt(1. - lam)
+    Wa = W * cut_rat #np.int was delet numpy 1.24
+    Ha = H * cut_rat
+    cut_w = Wa.astype(np.int64)
+    cut_h = Ha.astype(np.int64)
+
+    # uniform
+    cx = np.random.randint(W)
+    cy = np.random.randint(H)
+
+    bbx1 = np.clip(cx - cut_w // 2, 0, W)
+    bby1 = np.clip(cy - cut_h // 2, 0, H)
+    bbx2 = np.clip(cx + cut_w // 2, 0, W)
+    bby2 = np.clip(cy + cut_h // 2, 0, H)
+
+    return bbx1, bby1, bbx2, bby2
 
 def train(
     configs: Dict,
@@ -73,16 +92,20 @@ def train(
         targets = targets.long().to(device)
         outputs = model(images)
         loss = loss_fn(outputs, targets)
-
+        
         #cutmix
         #criterion = nn.CrossEntropyLoss().cuda()
+        lam = np.random.beta(512, 384) #hyperparameter (image size)
         rand_index = torch.randperm(images.size()[0]).cuda()
         target_a = targets
         target_b = targets[rand_index]
+        '''
         bbx1 = 0 
         bby1 = 0
         bbx2 = 256
         bby2 = 384
+        '''
+        bbx1, bby1, bbx2, bby2 = rand_bbox(images.size(), lam)
         images[:, :, bbx1:bbx2, bby1:bby2] = images[rand_index, :, bbx1:bbx2, bby1:bby2]
         lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (images.size()[-1] * images.size()[-2]))
         output = model(images)
@@ -252,7 +275,8 @@ def run_pytorch(configs) -> None:
 
     model = SingleLabelModel().to(device)
 
-    loss_fn = get_cross_entropy_loss()
+    #loss_fn = get_cross_entropy_loss()
+    loss_fn = get_focal_loss()
     optimizer = get_adam(model, configs)
     scheduler = None
 
