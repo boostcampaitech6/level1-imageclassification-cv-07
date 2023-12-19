@@ -3,8 +3,8 @@ task_name: "mask_classification"
 ckpt_path: './checkpoints'
 seed: 42
 data:
-  train_dir: "./data/train/images"
-  csv_dir: "./data/train/train.csv"
+  train_dir: "/data/ephemeral/home/train/images"
+  csv_dir: "/data/ephemeral/home/train/train.csv"
   valid_rate: 0.2
   image_size: '380, 380'
 train:

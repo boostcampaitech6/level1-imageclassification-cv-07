@@ -74,6 +74,20 @@ def train(
         outputs = model(images)
         loss = loss_fn(outputs, targets)
 
+        #cutmix
+        #criterion = nn.CrossEntropyLoss().cuda()
+        rand_index = torch.randperm(images.size()[0]).cuda()
+        target_a = targets
+        target_b = targets[rand_index]
+        bbx1 = 0 
+        bby1 = 0
+        bbx2 = 190
+        bby2 = 380
+        images[:, :, bbx1:bbx2, bby1:bby2] = images[rand_index, :, bbx1:bbx2, bby1:bby2]
+        lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (images.size()[-1] * images.size()[-2]))
+        output = model(images)
+        loss = loss_fn(output, target_a) * lam + loss_fn(output, target_b) * (1. - lam)
+        
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
