@@ -174,7 +174,7 @@ def validation(
     print(
         f'Saved Model to {save_dir}/{epoch}-{val_loss:4.4}-{val_acc:4.2}.pth'
     )
-    return valid_loss
+    return val_loss
 
 
 def run_pytorch(configs) -> None:
@@ -216,7 +216,7 @@ def run_pytorch(configs) -> None:
         csv_path=configs['data']['csv_dir'],
         valid_rate=configs['data']['valid_rate']
     )
-    dataset.set_transform(train_transforms, valid_transforms)
+    dataset.set_transform(train_transforms)
     train_data, val_data = dataset.split_dataset()
 
     train_loader = DataLoader(
@@ -224,14 +224,14 @@ def run_pytorch(configs) -> None:
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=True,
-        pin_memory=True,
+        # pin_memory=True,
     )
     val_loader = DataLoader(
         val_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=False,
-        pin_memory=True,
+        # pin_memory=True,
     )
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
