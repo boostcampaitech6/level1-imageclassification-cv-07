@@ -15,8 +15,7 @@ from torch.utils.data import DataLoader
 
 from datasets.datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
-from utils.transform import TrainAugmentation
-from utils.utils import get_lr
+from utils.utils import get_lr, mixup_aug, mixuploss
 from ops.losses import get_cross_entropy_loss
 from ops.optim import get_adam
 
@@ -30,7 +29,7 @@ _Scheduler = torch.optim.lr_scheduler._LRScheduler
 def seed_everything(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # if use multi-GPU
+    torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
@@ -46,6 +45,7 @@ def train(
     optimizer: _Optimizer,
     scheduler: _Scheduler,
     epoch: int,
+    mixup: bool,
 ) -> None:
     """데이터셋으로 뉴럴 네트워크를 훈련합니다.
 
@@ -71,8 +71,16 @@ def train(
     for batch, (images, targets) in enumerate(dataloader):
         images = images.float().to(device)
         targets = targets.long().to(device)
-        outputs = model(images)
-        loss = loss_fn(outputs, targets)
+        if mixup and (batch + 1) % 3 == 0:
+            images, labels_a, labels_b, lambda_ = mixup_aug(images, targets)
+            outputs = model(images)
+            loss = mixuploss(
+                loss_fn, pred=outputs, labels_a=labels_a,
+                labels_b=labels_b, lambda_=lambda_
+            )
+        else:
+            outputs = model(images)
+            loss = loss_fn(outputs, targets)
 
         optimizer.zero_grad()
         loss.backward()
@@ -150,7 +158,8 @@ def validation(
                 outputs = str(outputs[idx].cpu().numpy())
                 targets = str(targets[idx].cpu().numpy())
                 example_images.append(wandb.Image(
-                    images[idx], caption="Pred: {} Truth: {}".format(outputs, targets)
+                    images[idx],
+                    caption="Pred: {} Truth: {}".format(outputs, targets)
                 ))
 
     val_loss = np.sum(valid_loss) / len(dataloader)
@@ -211,11 +220,13 @@ def run_pytorch(configs) -> None:
         A.Normalize(mean=mean, std=std),
         A.pytorch.ToTensorV2()
     ])
+
     dataset = MaskSplitByProfileDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
         valid_rate=configs['data']['valid_rate']
     )
+
     dataset.set_transform(train_transforms)
     train_data, val_data = dataset.split_dataset()
 
@@ -224,14 +235,14 @@ def run_pytorch(configs) -> None:
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=True,
-        # pin_memory=True,
+        pin_memory=True,
     )
     val_loader = DataLoader(
         val_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=False,
-        # pin_memory=True,
+        pin_memory=True,
     )
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -264,10 +275,12 @@ def run_pytorch(configs) -> None:
     for e in range(configs['train']['epoch']):
         print(f'Epoch {e+1}\n-------------------------------')
         train(
-            configs, train_loader,
-            device, model, loss_fn, optimizer, scheduler, e+1
+            configs, train_loader, device, model, loss_fn,
+            optimizer, scheduler, e+1, configs['train']['mixup']
         )
-        val_loss = validation(val_loader, save_dir, device, model, loss_fn, e+1)
+        val_loss = validation(
+            val_loader, save_dir, device, model, loss_fn, e+1
+        )
         if val_loss < best_loss:
             best_loss = val_loss
             cnt = 0

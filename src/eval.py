@@ -62,9 +62,12 @@ def run_pytorch(configs) -> None:
     :param configs: 학습에 사용할 config들
     :type configs: dict
     """
+    test_dir = configs['data']['test_dir']
     submission = pd.read_csv(configs['data']['csv_dir'])
     width, height = map(int, configs['data']['image_size'].split(','))
-    image_paths = [os.path.join(configs['data']['test_dir'], img_id) for img_id in submission.ImageID]
+    image_paths = [
+        os.path.join(test_dir, img_id) for img_id in submission.ImageID
+    ]
     test_data = TestDataset(
         img_paths=image_paths,
         width=width,
