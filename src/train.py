@@ -10,7 +10,7 @@ import wandb
 from sklearn.metrics import f1_score
 
 import torch
-from torch import nn, optim
+from torch import nn
 from torch.utils.data import DataLoader
 
 from datasets.datasets import MaskSplitByProfileDataset
@@ -45,7 +45,7 @@ def train(
     loss_fn: nn.Module,
     optimizer: _Optimizer,
     scheduler: _Scheduler,
-    epoch: int
+    epoch: int,
 ) -> None:
     """데이터셋으로 뉴럴 네트워크를 훈련합니다.
 
@@ -63,12 +63,13 @@ def train(
     model.train()
 
     loss_value = 0
+    train_loss = 0
+    train_acc = 0
     accuracy = 0
 
     epochs = configs['train']['epoch']
-
     for batch, (images, targets) in enumerate(dataloader):
-        images = images.to(device)
+        images = images.float().to(device)
         targets = targets.long().to(device)
         outputs = model(images)
         loss = loss_fn(outputs, targets)
@@ -91,15 +92,14 @@ def train(
                 f"| lr {current_lr} \ntrain loss {train_loss:4.4}"
                 f" | train acc {train_acc}"
             )
-            wandb.log({
-                "train_loss": train_loss,
-                "train_acc": train_acc,
-                'train_rgb': wandb.Image(images[0], caption=f'{targets[0]}')
-            })
 
             loss_value = 0
             accuracy = 0
-
+        wandb.log({
+                "train_loss": train_loss,
+                "train_acc": train_acc,
+                'train_rgb': wandb.Image(images[0], caption=f'{targets[0]}')
+            }, step=epoch)
     if scheduler is not None:
         scheduler.step()
 
@@ -133,7 +133,7 @@ def validation(
 
     with torch.no_grad():
         for batch, (images, targets) in enumerate(dataloader):
-            images = images.to(device)
+            images = images.float().to(device)
             targets = targets.long().to(device)
             outputs = model(images)
             loss = loss_fn(outputs, targets)
@@ -150,9 +150,9 @@ def validation(
                 outputs = str(outputs[idx].cpu().numpy())
                 targets = str(targets[idx].cpu().numpy())
                 example_images.append(wandb.Image(
-                    images[idx], caption="Pred: {} Truth: {}".format(outputs, targets)))
+                    images[idx], caption="Pred: {} Truth: {}".format(outputs, targets)
+                ))
 
-            wandb.log({"Image": example_images})
     val_loss = np.sum(valid_loss) / len(dataloader)
     val_acc = np.sum(valid_acc) / len(dataloader.dataset)
     val_f1 = f1_score(y_true=val_labels, y_pred=val_preds, average='macro')
@@ -162,10 +162,11 @@ def validation(
         f"\nvalid f1 score {val_f1:.5}"
     )
     wandb.log({
+        "Image": example_images,
         "valid_loss": val_loss,
         "valid_acc": val_acc,
         "val_f1_score": val_f1
-    })
+    }, step=epoch)
     torch.save(
         model.state_dict(),
         f'{save_dir}/{epoch}-{val_loss:4.4}-{val_acc:4.2}.pth'
@@ -173,6 +174,7 @@ def validation(
     print(
         f'Saved Model to {save_dir}/{epoch}-{val_loss:4.4}-{val_acc:4.2}.pth'
     )
+    #early_stopping
 
 
 def run_pytorch(configs) -> None:
@@ -195,7 +197,15 @@ def run_pytorch(configs) -> None:
         }
     )
     width, height = map(int, configs['data']['image_size'].split(','))
-    train_transforms = TrainAugmentation(resize=[380, 380])
+    # train_transforms = TrainAugmentation(resize=[width, height])
+    import albumentations as A
+    mean = [0.548, 0.504, 0.479]
+    std = [0.237, 0.247, 0.246]
+    train_transforms = A.Compose([
+        A.Resize(width, height),
+        A.Normalize(mean=mean, std=std),
+        A.pytorch.ToTensorV2()
+    ])
     dataset = MaskSplitByProfileDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
@@ -204,19 +214,21 @@ def run_pytorch(configs) -> None:
     dataset.set_transform(train_transforms)
     train_data, val_data = dataset.split_dataset()
 
+    print(train_data[0])
+    print(train_data[0][0].shape)
     train_loader = DataLoader(
         train_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=True,
-        #pin_memory=True,
+        pin_memory=True,
     )
     val_loader = DataLoader(
         val_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=False,
-        #pin_memory=True,
+        pin_memory=True,
     )
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'

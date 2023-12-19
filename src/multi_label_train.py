@@ -10,14 +10,15 @@ import wandb
 from sklearn.metrics import f1_score
 
 import torch
-from torch import nn, optim
+from torch import nn
 from torch.utils.data import DataLoader
 
-from datasets.mask_dataset import MultiLabelDataset
+from datasets.datasets import MultiLabelMaskSplitByProfileDataset
 from models.mask_model import MultiLabelModel
-from utils.transform import TrainAugmentation, TestAugmentation
+from utils.transform import TrainAugmentation
 from utils.utils import get_lr
 from ops.losses import get_cross_entropy_loss
+from ops.optim import get_adam
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -213,7 +214,7 @@ def validation(
             val_preds.extend(preds.cpu().numpy())
 
             if (batch+1) % 50 == 0:
-                idx = random.randint(0, len(mask_out))
+                idx = random.randint(0, mask_out.size(0)-1)
                 outputs = str(mask_out[idx].cpu().numpy()) + \
                     str(gen_out[idx].cpu().numpy()) + str(age_out[idx].cpu().numpy())
                 targets = str(mask_label[idx].cpu().numpy()) + \
@@ -284,24 +285,15 @@ def run_pytorch(configs) -> None:
             'val_rate': configs['data']['valid_rate']
         }
     )
-    image_size = configs['data']['image_size']
-    train_augmentation = TrainAugmentation(resize=[image_size, image_size])
-    train_data = MultiLabelDataset(
+    width, height = map(int, configs['data']['image_size'].split(','))
+    train_transforms = TrainAugmentation(resize=[width, height])
+    dataset = MultiLabelMaskSplitByProfileDataset(
         image_dir=configs['data']['train_dir'],
         csv_path=configs['data']['csv_dir'],
-        transform=train_augmentation,
-        mode='train',
         valid_rate=configs['data']['valid_rate']
     )
-
-    valid_augmentation = TestAugmentation(resize=[image_size, image_size])
-    val_data = MultiLabelDataset(
-        image_dir=configs['data']['train_dir'],
-        csv_path=configs['data']['csv_dir'],
-        transform=valid_augmentation,
-        mode='valid',
-        valid_rate=configs['data']['valid_rate']
-    )
+    dataset.set_transform(train_transforms)
+    train_data, val_data = dataset.split_dataset()
 
     train_loader = DataLoader(
         train_data,
@@ -323,7 +315,7 @@ def run_pytorch(configs) -> None:
     model = MultiLabelModel().to(device)
 
     loss_fn = get_cross_entropy_loss()
-    optimizer = optim.Adam(model.parameters(), lr=configs['train']['lr'])
+    optimizer = get_adam(model, configs)
     scheduler = None
 
     save_dir = os.path.join(configs['ckpt_path'], str(model.name))
