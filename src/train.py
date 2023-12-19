@@ -81,8 +81,8 @@ def train(
         target_b = targets[rand_index]
         bbx1 = 0 
         bby1 = 0
-        bbx2 = 190
-        bby2 = 380
+        bbx2 = 256
+        bby2 = 384
         images[:, :, bbx1:bbx2, bby1:bby2] = images[rand_index, :, bbx1:bbx2, bby1:bby2]
         lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (images.size()[-1] * images.size()[-2]))
         output = model(images)
