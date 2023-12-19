@@ -24,7 +24,7 @@ warnings.filterwarnings('ignore')
 
 _Optimizer = torch.optim.Optimizer
 _Scheduler = torch.optim.lr_scheduler._LRScheduler
-
+scaler = torch.cuda.amp.GradScaler()
 
 def seed_everything(seed):
     torch.manual_seed(seed)
@@ -83,9 +83,9 @@ def train(
             loss = loss_fn(outputs, targets)
 
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
         loss_value += loss.item()
         outputs = outputs.argmax(dim=-1)
         accuracy += (outputs == targets).sum().item()
