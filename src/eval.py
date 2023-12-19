@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 
 from datasets.datasets import TestDataset
 from models.mask_model import SingleLabelModel
-from utils.transform import TestAugmentation
 
 
 def seed_everything(seed):
