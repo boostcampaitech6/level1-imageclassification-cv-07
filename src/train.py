@@ -12,6 +12,8 @@ from sklearn.metrics import f1_score
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast
+from torch.cuda.amp import GradScaler
 
 from datasets.datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
@@ -24,7 +26,7 @@ warnings.filterwarnings('ignore')
 
 _Optimizer = torch.optim.Optimizer
 _Scheduler = torch.optim.lr_scheduler._LRScheduler
-scaler = torch.cuda.amp.GradScaler()
+scaler = GradScaler()
 
 def seed_everything(seed):
     torch.manual_seed(seed)
@@ -73,16 +75,23 @@ def train(
     for batch, (images, targets) in enumerate(dataloader):
         images = images.float().to(device)
         targets = targets.long().to(device)
-        if mixup and (batch + 1) % 3 == 0: 
+        if mixup and (batch + 1) % 3 == 0:
             images, labels_a, labels_b, lambda_ = mixup_aug(images, targets)
-            outputs = model(images)
-            loss = mixuploss(
-                loss_fn, pred=outputs, labels_a=labels_a,
-                labels_b=labels_b, lambda_=lambda_
-            )
+            with autocast():
+                outputs = model(images)
+                loss = mixuploss(
+                    loss_fn, pred=outputs, labels_a=labels_a,
+                    labels_b=labels_b, lambda_=lambda_
+                )
         else:
-            outputs = model(images)
-            loss = loss_fn(outputs, targets)
+            with autocast():
+                outputs = model(images)
+                loss = loss_fn(outputs, targets)
+
+        optimizer.zero_grad()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         optimizer.zero_grad()
         scaler.scale(loss).backward()
