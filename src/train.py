@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from datasets.datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
 from utils.utils import get_lr, mixup_aug, mixuploss
-from ops.losses import get_cross_entropy_loss
+from ops.losses import get_cross_entropy_loss, get_label_smooth_loss
 from ops.optim import get_adam
 
 import warnings
@@ -71,7 +71,7 @@ def train(
     for batch, (images, targets) in enumerate(dataloader):
         images = images.float().to(device)
         targets = targets.long().to(device)
-        if mixup and (batch + 1) % 3 == 0:
+        if mixup and (batch + 1) % 3 == 0: 
             images, labels_a, labels_b, lambda_ = mixup_aug(images, targets)
             outputs = model(images)
             loss = mixuploss(
@@ -249,7 +249,7 @@ def run_pytorch(configs) -> None:
 
     model = SingleLabelModel().to(device)
 
-    loss_fn = get_cross_entropy_loss()
+    loss_fn = get_label_smooth_loss() # get_cross_entropy_loss()
     optimizer = get_adam(model, configs)
     scheduler = None
 

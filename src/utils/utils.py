@@ -8,11 +8,11 @@ def get_lr(optimizer):
 
 
 def mixup_aug(input, target, alpha=1.0):
-    lambda_ = np.random.beta(alpha, alpha)
-
+    lambda_ = np.random.beta(alpha, alpha) # np.random.beta -> 두 개의 인자를 받아 베타분포를 따르는 랜덤수 뽑음
+    
     batch_size = input.size(0)
-    index = torch.randperm(batch_size)
-
+    index = torch.randperm(batch_size) # 0 ~ (batch_size-1)의 랜덤한 정수 순열을 뽑음
+    
     mixed_input = lambda_ * input + (1 - lambda_) * input[index, :]
     labels_a, labels_b = target, target[index]
 

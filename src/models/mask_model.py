@@ -44,9 +44,9 @@ class SingleLabelModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.model = timm.create_model(
-            'tf_efficientnet_b4_ns', pretrained=True, num_classes=18
+            'timm/mobilevitv2_200.cvnets_in22k_ft_in1k_384', pretrained=True, num_classes=18
         )
-        self.name = 'tf_efficientnet_b4_ns_mask_singlelabel'
+        self.name = 'timm/mobilevitv2_200.cvnets_in22k_ft_in1k_384_mask_singlelabel'
 
     def forward(self, x):
         x = self.model(x)
