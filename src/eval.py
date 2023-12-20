@@ -68,8 +68,8 @@ def run_pytorch(configs: Dict) -> None:
         image_paths=image_paths,
     )
     if configs['train']['imagenet']:
-        mean = [0.548, 0.504, 0.479]
-        std = [0.237, 0.247, 0.246]
+        mean = [0.485, 0.456, 0.406]
+        std = [0.229, 0.224, 0.225]
     else:
         mean = [0.561, 0.524, 0.501]
         std = [0.233, 0.243, 0.246]

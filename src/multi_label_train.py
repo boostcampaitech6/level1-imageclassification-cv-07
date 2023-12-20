@@ -7,7 +7,7 @@ from typing import Dict
 import numpy as np
 from omegaconf import OmegaConf
 import wandb
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, classification_report
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
@@ -245,6 +245,7 @@ def validation(
         f"| gender acc {gender_acc:4.2%} | age acc {age_acc:4.2%}"
         f"\nvalid f1 score {val_f1:.5}"
     )
+    print(classification_report(y_true=val_labels, y_pred=val_preds))
 
     if not configs['fast_train_mode']:
         wandb.log({
@@ -301,8 +302,8 @@ def run_pytorch(configs) -> None:
 
     width, height = map(int, configs['data']['image_size'].split(','))
     if configs['train']['imagenet']:
-        mean = [0.548, 0.504, 0.479]
-        std = [0.237, 0.247, 0.246]
+        mean = [0.485, 0.456, 0.406]
+        std = [0.229, 0.224, 0.225]
     else:
         mean = dataset.mean
         std = dataset.std

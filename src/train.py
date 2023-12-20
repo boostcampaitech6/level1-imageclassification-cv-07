@@ -7,7 +7,7 @@ from typing import Dict
 import numpy as np
 from omegaconf import OmegaConf
 import wandb
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, classification_report
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
@@ -19,7 +19,8 @@ from torch.cuda.amp import GradScaler
 
 from datasets.mask_datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
-from utils.utils import get_lr, mixup_aug, mixuploss,cutmix_aug ,cutmixloss, seed_everything
+from utils.utils import mixup_aug, mixuploss, cutmix_aug, cutmixloss
+from utils.utils import get_lr, seed_everything
 from ops.losses import get_loss
 from ops.optim import get_optim
 
@@ -29,6 +30,7 @@ warnings.filterwarnings('ignore')
 _Optimizer = torch.optim.Optimizer
 _Scheduler = torch.optim.lr_scheduler._LRScheduler
 scaler = GradScaler()
+
 
 def train(
     configs: Dict, dataloader: DataLoader, device: str,
@@ -66,7 +68,7 @@ def train(
     for batch, (images, targets) in enumerate(dataloader):
         images = images.float().to(device)
         targets = targets.long().to(device)
-        if mix=='mixup' and (batch + 1) % 3 == 0:
+        if mix == 'mixup' and (batch + 1) % 3 == 0:
             images, labels_a, labels_b, lambda_ = mixup_aug(images, targets)
             with autocast():
                 outputs = model(images)
@@ -74,8 +76,8 @@ def train(
                     loss_fn, pred=outputs, labels_a=labels_a,
                     labels_b=labels_b, lambda_=lambda_
                 )
-        elif mix=='cutmix' and (batch + 1) % 3 == 0:
-            images, target_a, target_b, lambda_= cutmix_aug(images, targets)
+        elif mix == 'cutmix' and (batch + 1) % 3 == 0:
+            images, target_a, target_b, lambda_ = cutmix_aug(images, targets)
             with autocast():
                 outputs = model(images)
                 loss = cutmixloss(
@@ -186,6 +188,7 @@ def validation(
         f"valid loss {val_loss:4.4} | valid acc {val_acc:4.2%}"
         f"\nvalid f1 score {val_f1:.5}"
     )
+    print(classification_report(y_true=val_labels, y_pred=val_preds))
 
     if not configs['fast_train_mode']:
         wandb.log({
@@ -240,8 +243,8 @@ def run_pytorch(configs: Dict) -> None:
 
     width, height = map(int, configs['data']['image_size'].split(','))
     if configs['train']['imagenet']:
-        mean = [0.548, 0.504, 0.479]
-        std = [0.237, 0.247, 0.246]
+        mean = [0.485, 0.456, 0.406]
+        std = [0.229, 0.224, 0.225]
     else:
         mean = dataset.mean
         std = dataset.std

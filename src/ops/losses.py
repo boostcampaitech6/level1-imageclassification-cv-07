@@ -3,7 +3,15 @@ from torch import nn
 import torch.nn.functional as F
 
 
-def get_loss(loss_name):
+def get_loss(loss_name: str) -> nn.Module:
+    """
+    loss 얻는 method
+
+    :param loss_name: loss name
+    :type loss_name: str
+    :return: loss
+    :rtype: nn.Module
+    """
     if loss_name == 'focal':
         return FocalLoss()
     elif loss_name == 'label_smooth':
@@ -35,7 +43,7 @@ class FocalLoss(nn.Module):
 
 
 class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes=3, smoothing=0.0, dim=-1):
+    def __init__(self, classes=18, smoothing=0.0, dim=-1):
         super(LabelSmoothingLoss, self).__init__()
         self.confidence = 1.0 - smoothing
         self.smoothing = smoothing
@@ -52,7 +60,7 @@ class LabelSmoothingLoss(nn.Module):
 
 
 class F1Loss(nn.Module):
-    def __init__(self, classes=3, epsilon=1e-7):
+    def __init__(self, classes=18, epsilon=1e-7):
         super().__init__()
         self.classes = classes
         self.epsilon = epsilon
@@ -64,7 +72,6 @@ class F1Loss(nn.Module):
         y_pred = F.softmax(y_pred, dim=1)
 
         tp = (y_true * y_pred).sum(dim=0).to(torch.float32)
-        tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
         fp = ((1 - y_true) * y_pred).sum(dim=0).to(torch.float32)
         fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
 
