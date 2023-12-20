@@ -28,17 +28,7 @@ warnings.filterwarnings('ignore')
 
 _Optimizer = torch.optim.Optimizer
 _Scheduler = torch.optim.lr_scheduler._LRScheduler
-scaler = torch.cuda.amp.GradScaler()
-
-def seed_everything(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(seed)
-    random.seed(seed)
-
+scaler = GradScaler()
 
 def train(
     configs: Dict, dataloader: DataLoader, device: str,
