@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 
 from datasets.datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
-from utils.utils import get_lr, mixup_aug, mixuploss
+from utils.utils import get_lr, mixup_aug, mixuploss, cutmix_aug, cutmixloss
 from ops.losses import get_cross_entropy_loss
 from ops.optim import get_adam
 
@@ -45,7 +45,7 @@ def train(
     optimizer: _Optimizer,
     scheduler: _Scheduler,
     epoch: int,
-    mixup: bool,
+    mix: str,
 ) -> None:
     """데이터셋으로 뉴럴 네트워크를 훈련합니다.
 
@@ -71,12 +71,19 @@ def train(
     for batch, (images, targets) in enumerate(dataloader):
         images = images.float().to(device)
         targets = targets.long().to(device)
-        if mixup and (batch + 1) % 3 == 0:
+        if mix=="mixup" and (batch + 1) % 3 == 0:
             images, labels_a, labels_b, lambda_ = mixup_aug(images, targets)
             outputs = model(images)
             loss = mixuploss(
                 loss_fn, pred=outputs, labels_a=labels_a,
                 labels_b=labels_b, lambda_=lambda_
+            )
+        elif mix=="cutmix" and (batch + 1) % 4 == 0:
+            images, target_a, target_b, lam = cutmix_aug(images, targets)
+            outputs = model(images)
+            loss = cutmixloss(
+                loss_fn, pred=outputs, target_a=target_a,
+                target_b=target_b, lam=lam
             )
         else:
             outputs = model(images)
@@ -276,7 +283,7 @@ def run_pytorch(configs) -> None:
         print(f'Epoch {e+1}\n-------------------------------')
         train(
             configs, train_loader, device, model, loss_fn,
-            optimizer, scheduler, e+1, configs['train']['mixup']
+            optimizer, scheduler, e+1, configs['train']['mix']
         )
         val_loss = validation(
             val_loader, save_dir, device, model, loss_fn, e+1

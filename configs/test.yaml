@@ -5,3 +5,5 @@ data:
   csv_dir: "./data/eval/info.csv"
   test_dir: "./data/eval/images"
   image_size: '512, 384'
+  mix: "cutmix"
+  #mix:"mixup"
