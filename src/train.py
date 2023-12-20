@@ -18,7 +18,7 @@ from torch.cuda.amp import autocast
 from torch.cuda.amp import GradScaler
 
 from datasets.mask_datasets import MaskSplitByProfileDataset
-from models.mask_model import SingleLabelModel
+from models.mask_model import get_model
 from utils.utils import mixup_aug, mixuploss, cutmix_aug, cutmixloss
 from utils.utils import get_lr, seed_everything
 from ops.losses import get_loss
@@ -55,7 +55,7 @@ def train(
     :param epoch: 현재 훈련되는 epoch
     :type epoch: int
     :param mixup: mixup 사용 여부
-    :type mixup: bool
+    :type mixup: str
     """
     model.train()
 
@@ -73,16 +73,16 @@ def train(
             with autocast():
                 outputs = model(images)
                 loss = mixuploss(
-                    loss_fn, pred=outputs, labels_a=labels_a,
-                    labels_b=labels_b, lambda_=lambda_
+                    loss_fn, pred=outputs, l_a=labels_a,
+                    l_b=labels_b, lambda_=lambda_
                 )
         elif mix == 'cutmix' and (batch + 1) % 3 == 0:
             images, target_a, target_b, lambda_ = cutmix_aug(images, targets)
             with autocast():
                 outputs = model(images)
                 loss = cutmixloss(
-                    loss_fn, pred=outputs, target_a=target_a,
-                    target_b=target_b, lambda_=lambda_
+                    loss_fn, pred=outputs, l_a=target_a,
+                    l_b=target_b, lambda_=lambda_
                 )
         else:
             with autocast():
@@ -250,6 +250,8 @@ def run_pytorch(configs: Dict) -> None:
         std = dataset.std
 
     train_transforms = A.Compose([
+        A.HorizontalFlip(p=0.5),
+        A.CLAHE(p=0.3),
         A.Resize(width, height),
         A.Normalize(mean=mean, std=std),
         ToTensorV2()
@@ -278,7 +280,7 @@ def run_pytorch(configs: Dict) -> None:
     )
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = SingleLabelModel().to(device)
+    model = get_model(configs['model']).to(device)
 
     loss_fn = get_loss(configs['train']['loss'])
     optimizer = get_optim(configs['train']['optim'], model, configs)

@@ -2,6 +2,21 @@ import timm
 from torch import nn
 
 
+def get_model(model_name):
+    if model_name == 'convnext_small.fb_in22k':
+        return SingleLabelModel()
+    elif model_name == 'resnet50.a1_in1k':
+        return ResNet50Model()
+    elif model_name == 'tf_efficientnet_b4.ns_jft_in1k':
+        return EfficientNetB4Model()
+    elif model_name == 'tf_efficientnet_b7.ns_jft_in1k':
+        return EfficientNetB7Model()
+    elif model_name == 'vit_base_patch16_224.augreg2_in21k_ft_in1k':
+        return VITModel()
+    elif model_name == 'swin_base_patch4_window7_224.ms_in22k_ft_in1k':
+        return SwinTModel()
+
+
 class MultiLabelModel(nn.Module):
     def __init__(self):
         super().__init__()
