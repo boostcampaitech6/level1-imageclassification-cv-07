@@ -19,5 +19,5 @@ train:
   epoch: 25
   imagenet: False
   early_patience: 5
-  mixup: True
+  mix: 'mixup'
   log_interval: 50
