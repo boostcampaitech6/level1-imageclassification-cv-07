@@ -44,8 +44,7 @@ def train(
     optimizer: _Optimizer,
     scheduler: _Scheduler,
     epoch: int,
-    mixup: bool,
-    cutmix: bool,
+    mix: str,
 ) -> None:
     """데이터셋으로 뉴럴 네트워크를 훈련합니다.
 
@@ -71,18 +70,14 @@ def train(
     for batch, (images, targets) in enumerate(dataloader):
         images = images.float().to(device)
         targets = targets.long().to(device)
-        if mixup and (batch + 1) % 3 == 0:
+        if mix=="mixup" and (batch + 1) % 3 == 0:
             images, labels_a, labels_b, lambda_ = mixup_aug(images, targets)
             outputs = model(images)
             loss = mixuploss(
                 loss_fn, pred=outputs, labels_a=labels_a,
                 labels_b=labels_b, lambda_=lambda_
             )
-        else:
-            outputs = model(images)
-            loss = loss_fn(outputs, targets)
-            
-        if cutmix and (batch + 1) % 4 == 0:
+        elif mix=="cutmix" and (batch + 1) % 4 == 0:
             images, target_a, target_b, lam = cutmix_aug(images, targets)
             outputs = model(images)
             loss = cutmixloss(
@@ -92,7 +87,7 @@ def train(
         else:
             outputs = model(images)
             loss = loss_fn(outputs, targets)
-        
+            
         optimizer.zero_grad()
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -288,7 +283,7 @@ def run_pytorch(configs) -> None:
         print(f'Epoch {e+1}\n-------------------------------')
         train(
             configs, train_loader, device, model, loss_fn,
-            optimizer, scheduler, e+1, configs['train']['mixup'], configs['train']['cutmix']
+            optimizer, scheduler, e+1, configs['train']['mix']
         )
         val_loss = validation(
             val_loader, save_dir, device, model, loss_fn, e+1
