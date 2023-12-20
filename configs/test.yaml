@@ -1,5 +1,5 @@
 task_name: "mask_classification"
-ckpt_path: '/data/ephemeral/home/teamcode/level1-imageclassification-cv-07/checkpoints/tf_efficientnet_b4_ns_mask_singlelabel/v4/4-0.9807-0.86.pth'
+ckpt_path: '/data/ephemeral/home/teamcode/level1-imageclassification-cv-07/checkpoints/timm/mobilevitv2_200.cvnets_in22k_ft_in1k_384_mask_singlelabel/v0/5-1.032-0.86.pth'
 seed: 42
 data:
   csv_dir: "/data/ephemeral/home/eval/info.csv"

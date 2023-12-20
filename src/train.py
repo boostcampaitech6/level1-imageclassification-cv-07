@@ -67,6 +67,8 @@ def train(
     train_acc = 0
     accuracy = 0
 
+
+
     epochs = configs['train']['epoch']
     for batch, (images, targets) in enumerate(dataloader):
         images = images.float().to(device)

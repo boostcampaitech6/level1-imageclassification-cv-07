@@ -8,7 +8,7 @@ data:
   valid_rate: 0.2
   image_size: '512, 384'
 train:
-  batch_size: 32
+  batch_size: 16
   lr: 0.0001
   epoch: 25
   early_patience: 5
