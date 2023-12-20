@@ -14,6 +14,8 @@ from albumentations.pytorch import ToTensorV2
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast
+from torch.cuda.amp import GradScaler
 
 from src.datasets.mask_datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
@@ -76,18 +78,21 @@ def train(
         targets = targets.long().to(device)
         if mixup and (batch + 1) % 3 == 0:
             images, labels_a, labels_b, lambda_ = mixup_aug(images, targets)
-            outputs = model(images)
-            loss = mixuploss(
-                loss_fn, pred=outputs, labels_a=labels_a,
-                labels_b=labels_b, lambda_=lambda_
-            )
+            with autocast():
+                outputs = model(images)
+                loss = mixuploss(
+                    loss_fn, pred=outputs, labels_a=labels_a,
+                    labels_b=labels_b, lambda_=lambda_
+                )
         else:
-            outputs = model(images)
-            loss = loss_fn(outputs, targets)
+            with autocast():
+                outputs = model(images)
+                loss = loss_fn(outputs, targets)
 
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         loss_value += loss.item()
         outputs = outputs.argmax(dim=-1)
