@@ -1,11 +1,11 @@
 task_name: "mask_classification"
 seed: 42
 model: 'mobilevitv2_200.cvnets_in22k_ft_in1k_384'
-ckpt_path: '/data/ephemeral/home/teamcode/level1-imageclassification-cv-07/checkpoints/mobilevitv2_200.cvnets_in22k_ft_in1k_384/v0/5-0.2119-0.88.pth'
+ckpt_path: '/data/ephemeral/home/teamcode/level1-imageclassification-cv-07/checkpoints/mobilevitv2_200.cvnets_in22k_ft_in1k_384/v1/6-0.2216-0.88.pth'
 
 data:
-  csv_dir: "/data/ephemeral/home/eval/info.csv"
-  test_dir: "/data/ephemeral/home/eval/images"
+  csv_dir: "/data/ephemeral/home/seg_data/eval/info.csv"
+  test_dir: "/data/ephemeral/home/seg_data/eval/images"
   image_size: '512, 384'
 
 train:
