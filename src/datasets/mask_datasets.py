@@ -10,7 +10,7 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 
 from torch import Tensor
-from torch.utils.data import Dataset, Subset, random_split
+from torch.utils.data import Dataset, random_split
 import albumentations as A
 
 
@@ -88,6 +88,38 @@ class AgeLabels(int, Enum):
             return cls.MIDDLE
         else:
             return cls.OLD
+
+
+class Subset(Dataset):
+
+    def __init__(self, dataset: Dataset, indices, name) -> None:
+        self.dataset = dataset
+        self.indices = indices
+        self.name = name
+
+    def __getitem__(self, idx):
+        if isinstance(idx, list):
+            if self.name == 'train':
+                self.dataset.set_train_transform()
+            elif self.name == 'val':
+                self.dataset.set_valid_transform()
+            return self.dataset[[self.indices[i] for i in idx]]
+        return self.dataset[self.indices[idx]]
+
+    def __getitems__(self, indices: List[int]):
+        if self.name == 'train':
+            self.dataset.set_train_transform()
+        elif self.name == 'val':
+            self.dataset.set_valid_transform()
+        if callable(getattr(self.dataset, "__getitems__", None)):
+            return self.dataset.__getitems__(
+                [self.indices[idx] for idx in indices]
+            ) 
+        else:
+            return [self.dataset[self.indices[idx]] for idx in indices]
+
+    def __len__(self):
+        return len(self.indices)
 
 
 class SingleLabelDataset(Dataset):
@@ -177,13 +209,32 @@ class SingleLabelDataset(Dataset):
             self.mean = np.mean(sums, axis=0) / 255
             self.std = (np.mean(squared, axis=0) - self.mean**2) ** 0.5 / 255
 
-    def set_transform(self, transform: A.Compose) -> None:
+    def set_transform(
+            self,
+            train_transform: A.Compose,
+            valid_transform: A.Compose
+            ) -> None:
         """
         transform setter method
-        :param transform: albumentations transform compose한 것
-        :type transform: A.Compose
+        :param train_transform: albumentations train transform compose한 것
+        :type train_transform: A.Compose
+        :param valid_transform: albumentations valid transform compose한 것
+        :type valid_transform: A.Compose
         """
-        self.transform = transform
+        self.train_transform = train_transform
+        self.valid_transform = valid_transform
+
+    def set_train_transform(self) -> None:
+        """
+        train transform setter method
+        """
+        self.transform = self.train_transform
+
+    def set_valid_transform(self) -> None:
+        """
+        valid transform setter method
+        """
+        self.transform = self.valid_transform
 
     def __len__(self) -> int:
         """
@@ -212,7 +263,7 @@ class SingleLabelDataset(Dataset):
         image = np.array(image)
         if self.transform:
             if isinstance(self.transform, A.Compose):
-                image = self.transform(image)['image']
+                image = self.transform(image=image)['image']
 
         return image, target
 
@@ -391,13 +442,32 @@ class MultiLabelDataset(Dataset):
             self.mean = np.mean(sums, axis=0) / 255
             self.std = (np.mean(squared, axis=0) - self.mean**2) ** 0.5 / 255
 
-    def set_transform(self, transform: A.Compose) -> None:
+    def set_transform(
+            self,
+            train_transform: A.Compose,
+            valid_transform: A.Compose
+            ) -> None:
         """
         transform setter method
-        :param transform: albumentations transform compose한 것
-        :type transform: A.Compose
+        :param train_transform: albumentations train transform compose한 것
+        :type train_transform: A.Compose
+        :param valid_transform: albumentations valid transform compose한 것
+        :type valid_transform: A.Compose
         """
-        self.transform = transform
+        self.train_transform = train_transform
+        self.valid_transform = valid_transform
+
+    def set_train_transform(self) -> None:
+        """
+        train transform setter method
+        """
+        self.transform = self.train_transform
+
+    def set_valid_transform(self) -> None:
+        """
+        valid transform setter method
+        """
+        self.transform = self.valid_transform
 
     def __len__(self) -> int:
         """
@@ -426,7 +496,7 @@ class MultiLabelDataset(Dataset):
         image = np.array(image)
         if self.transform:
             if isinstance(self.transform, A.Compose):
-                image = self.transform(image)['image']
+                image = self.transform(image=image)['image']
 
         return image, target
 
@@ -559,7 +629,7 @@ class MaskSplitByProfileDataset(SingleLabelDataset):
             profile for profile in profiles if not profile.startswith(".")
         ]
 
-        split_profiles = self.split_profile(self.valid_rate)
+        split_profiles = self.split_profile()
         cnt = 0
         for phase, indices in split_profiles.items():
             for idx in indices:
@@ -587,14 +657,15 @@ class MaskSplitByProfileDataset(SingleLabelDataset):
                     self.indices[phase].append(cnt)
                     cnt += 1
 
-    def split_dataset(self) -> List[Subset, Subset]:
+    def split_dataset(self) -> List[Subset]:
         """
         get split dataset method
         :return: 데이터셋 나눠서 List로 묶기
-        :rtype: List[Subset, Subset]
+        :rtype: List[Subset]
         """
+
         return [
-            Subset(self, indices) for phase, indices in self.indices.items()
+            Subset(self, indices, phase) for phase, indices in self.indices.items()
         ]
 
 
@@ -656,7 +727,7 @@ class MultiLabelMaskSplitByProfileDataset(MultiLabelDataset):
             profile for profile in profiles if not profile.startswith(".")
         ]
 
-        split_profiles = self.split_profile(self.valid_rate)
+        split_profiles = self.split_profile()
         cnt = 0
         for phase, indices in split_profiles.items():
             for idx in indices:
@@ -684,14 +755,15 @@ class MultiLabelMaskSplitByProfileDataset(MultiLabelDataset):
                     self.indices[phase].append(cnt)
                     cnt += 1
 
-    def split_dataset(self) -> List[Subset, Subset]:
+    def split_dataset(self) -> List[Subset]:
         """
         get split dataset method
         :return: 데이터셋 나눠서 List로 묶기
-        :rtype: List[Subset, Subset]
+        :rtype: List[Subset]
         """
+
         return [
-            Subset(self, indices) for phase, indices in self.indices.items()
+            Subset(self, indices, phase) for phase, indices in self.indices.items()
         ]
 
 

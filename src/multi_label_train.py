@@ -299,16 +299,14 @@ def run_pytorch(configs) -> None:
         csv_path=configs['data']['csv_dir']
     )
 
-    train_data, val_data = dataset.split_dataset()
-
+    width, height = map(int, configs['data']['image_size'].split(','))
     if configs['train']['imagenet']:
         mean = [0.548, 0.504, 0.479]
         std = [0.237, 0.247, 0.246]
     else:
-        mean = train_data.mean
-        std = train_data.std
+        mean = dataset.mean
+        std = dataset.std
 
-    width, height = map(int, configs['data']['image_size'].split(','))
     train_transforms = A.Compose([
         A.Resize(width, height),
         A.Normalize(mean=mean, std=std),
@@ -320,8 +318,8 @@ def run_pytorch(configs) -> None:
         ToTensorV2()
     ])
 
-    train_data.set_transform(train_transforms)
-    val_data.set_transform(valid_transforms)
+    dataset.set_transform(train_transforms, valid_transforms)
+    train_data, val_data = dataset.split_dataset()
 
     train_loader = DataLoader(
         train_data,
