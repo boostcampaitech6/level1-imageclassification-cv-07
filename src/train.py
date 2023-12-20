@@ -92,11 +92,6 @@ def train(
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
-
-        optimizer.zero_grad()
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
         loss_value += loss.item()
         outputs = outputs.argmax(dim=-1)
         accuracy += (outputs == targets).sum().item()
