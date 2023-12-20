@@ -19,7 +19,7 @@ from torch.cuda.amp import GradScaler
 
 from datasets.mask_datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
-from utils.utils import get_lr, mixup_aug, mixuploss, seed_everything
+from utils.utils import get_lr, mixup_aug, mixuploss,cutmix_aug ,cutmixloss, seed_everything
 from ops.losses import get_loss
 from ops.optim import get_optim
 
@@ -43,7 +43,7 @@ def seed_everything(seed):
 def train(
     configs: Dict, dataloader: DataLoader, device: str,
     model: nn.Module, loss_fn: nn.Module, optimizer: _Optimizer,
-    scheduler: _Scheduler, epoch: int, mixup: bool
+    scheduler: _Scheduler, epoch: int, mix: str
 ) -> None:
     """
     데이터셋으로 훈련
@@ -76,13 +76,21 @@ def train(
     for batch, (images, targets) in enumerate(dataloader):
         images = images.float().to(device)
         targets = targets.long().to(device)
-        if mixup and (batch + 1) % 3 == 0:
+        if mix=='mixup' and (batch + 1) % 3 == 0:
             images, labels_a, labels_b, lambda_ = mixup_aug(images, targets)
             with autocast():
                 outputs = model(images)
                 loss = mixuploss(
                     loss_fn, pred=outputs, labels_a=labels_a,
                     labels_b=labels_b, lambda_=lambda_
+                )
+        elif mix=='cutmix' and (batch + 1) % 3 == 0:
+            images, target_a, target_b, lambda_= cutmix_aug(images, targets)
+            with autocast():
+                outputs = model(images)
+                loss = cutmixloss(
+                    loss_fn, pred=outputs, target_a=target_a,
+                    target_b=target_b, lambda_=lambda_
                 )
         else:
             with autocast():
@@ -230,7 +238,7 @@ def run_pytorch(configs: Dict) -> None:
                 'epoch': configs['train']['epoch'],
                 'imagenet': configs['train']['imagenet'],
                 'early_patience': configs['train']['early_patience'],
-                'mixup': configs['train']['mixup'],
+                'mix': configs['train']['mix'],
             }
         )
 
@@ -307,7 +315,7 @@ def run_pytorch(configs: Dict) -> None:
         print(f'Epoch {e+1}\n-------------------------------')
         train(
             configs, train_loader, device, model, loss_fn,
-            optimizer, scheduler, e+1, configs['train']['mixup']
+            optimizer, scheduler, e+1, configs['train']['mix']
         )
         val_loss = validation(
             val_loader, save_dir, device, model, loss_fn, e+1
