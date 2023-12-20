@@ -1,14 +1,14 @@
 task_name: "mask_classification"
 seed: 42
-model: 'convnext_small.fb_in22k'
-ckpt_path: './checkpoints/~'
+model: 'mobilevitv2_200.cvnets_in22k_ft_in1k_384'
+ckpt_path: '/data/ephemeral/home/teamcode/level1-imageclassification-cv-07/checkpoints/mobilevitv2_200.cvnets_in22k_ft_in1k_384/v0/5-0.2119-0.88.pth'
 
 data:
-  csv_dir: "./data/eval/info.csv"
-  test_dir: "./data/eval/images"
+  csv_dir: "/data/ephemeral/home/eval/info.csv"
+  test_dir: "/data/ephemeral/home/eval/images"
   image_size: '512, 384'
 
 train:
   imagenet: False
-  loss: 'cross_entropy'
-  optim: 'adam'
+  loss: 'focal'
+  optim: 'adamw'

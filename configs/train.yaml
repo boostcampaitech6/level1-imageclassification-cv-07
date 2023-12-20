@@ -1,20 +1,20 @@
 task_name: "mask_classification"
 seed: 42
-model: 'convnext_small.fb_in22k'
+model: 'timm/mobilevitv2_200.cvnets_in22k_ft_in1k_384'
 ckpt_path: './checkpoints'
 
 fast_train_mode: False
 
 data:
-  train_dir: "./data/train/images"
-  csv_dir: "./data/train/train.csv"
+  train_dir: "/data/ephemeral/home/train/images"
+  csv_dir: "/data/ephemeral/home/train/train.csv"
   valid_rate: 0.2
   image_size: '512, 384'
 
 train:
-  loss: 'cross_entropy'
-  optim: 'adam'
-  batch_size: 32
+  loss: 'focal'
+  optim: 'adamw'
+  batch_size: 16
   lr: 0.0001
   epoch: 25
   imagenet: False
