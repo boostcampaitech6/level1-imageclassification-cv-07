@@ -10,5 +10,5 @@ data:
 
 train:
   imagenet: False
-  loss: 'cross_entropy'
-  optim: 'adam'
+  loss: 'cross_entropy' #focal, label_smooth, cross_entropy, f1
+  optim: 'adam' #sgd, adam, adamw, lion

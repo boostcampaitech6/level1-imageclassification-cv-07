@@ -3,7 +3,7 @@ seed: 42
 model: 'convnext_small.fb_in22k'
 ckpt_path: './checkpoints'
 
-fast_train_mode: False
+fast_train_mode: True
 
 data:
   train_dir: "./data/train/images"
@@ -12,12 +12,12 @@ data:
   image_size: '512, 384'
 
 train:
-  loss: 'cross_entropy'
-  optim: 'adam'
+  loss: 'cross_entropy' #focal, label_smooth, cross_entropy, f1
+  optim: 'adam' #sgd, adam, adamw, lion
   batch_size: 32
   lr: 0.0001
   epoch: 25
   imagenet: False
   early_patience: 5
-  mix: 'mixup'
+  mixup: True #mixup, cutmix, cutmixup
   log_interval: 50

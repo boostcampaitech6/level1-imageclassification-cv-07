@@ -12,8 +12,8 @@ data:
   image_size: '512, 384'
 
 train:
-  loss: 'cross_entropy'
-  optim: 'adam'
+  loss: 'cross_entropy' #focal, label_smooth, cross_entropy, f1
+  optim: 'adam' #sgd, adam, adamw, lion
   batch_size: 32
   lr: 0.0001
   epoch: 25
