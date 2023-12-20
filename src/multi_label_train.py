@@ -13,7 +13,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from datasets.datasets import MultiLabelMaskSplitByProfileDataset
+from src.datasets.mask_datasets import MultiLabelMaskSplitByProfileDataset
 from models.mask_model import MultiLabelModel
 from utils.utils import get_lr
 from ops.losses import get_cross_entropy_loss

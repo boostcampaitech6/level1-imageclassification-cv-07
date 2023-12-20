@@ -3,28 +3,17 @@ from torch import nn
 import torch.nn.functional as F
 
 
-def get_multi_loss():
-    return nn.MultiLabelSoftMarginLoss()
-
-
-def get_cross_entropy_loss():
-    return nn.CrossEntropyLoss()
-
-
-def get_bce_loss():
-    return nn.BCELoss()
-
-
-def get_focal_loss():
-    return FocalLoss()
-
-
-def get_label_smooth_loss():
-    return LabelSmoothingLoss()
-
-
-def get_f1_loss():
-    return F1Loss()
+def get_loss(loss_name):
+    if loss_name == 'focal':
+        return FocalLoss()
+    elif loss_name == 'label_smooth':
+        return LabelSmoothingLoss()
+    elif loss_name == 'cross_entropy':
+        return nn.CrossEntropyLoss()
+    elif loss_name == 'f1':
+        return F1Loss()
+    else:
+        return nn.CrossEntropyLoss()
 
 
 class FocalLoss(nn.Module):

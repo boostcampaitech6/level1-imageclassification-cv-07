@@ -8,6 +8,8 @@ import numpy as np
 from omegaconf import OmegaConf
 import wandb
 from sklearn.metrics import f1_score
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 import torch
 from torch import nn
@@ -15,10 +17,10 @@ from torch.utils.data import DataLoader
 from torch.cuda.amp import autocast
 from torch.cuda.amp import GradScaler
 
-from datasets.datasets import MaskSplitByProfileDataset
+from src.datasets.mask_datasets import MaskSplitByProfileDataset
 from models.mask_model import SingleLabelModel
 from utils.utils import get_lr, mixup_aug, mixuploss
-from ops.losses import get_cross_entropy_loss, get_label_smooth_loss
+from ops.losses import get_cross_entropy_loss
 from ops.optim import get_adam
 
 import warnings
@@ -28,7 +30,13 @@ _Optimizer = torch.optim.Optimizer
 _Scheduler = torch.optim.lr_scheduler._LRScheduler
 scaler = GradScaler()
 
-def seed_everything(seed):
+def seed_everything(seed: int) -> None:
+    """
+    시드 고정 method
+
+    :param seed: 시드
+    :type seed: int
+    """
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -39,17 +47,12 @@ def seed_everything(seed):
 
 
 def train(
-    configs: Dict,
-    dataloader: DataLoader,
-    device: str,
-    model: nn.Module,
-    loss_fn: nn.Module,
-    optimizer: _Optimizer,
-    scheduler: _Scheduler,
-    epoch: int,
-    mixup: bool,
+    configs: Dict, dataloader: DataLoader, device: str,
+    model: nn.Module, loss_fn: nn.Module, optimizer: _Optimizer,
+    scheduler: _Scheduler, epoch: int, mixup: bool,
 ) -> None:
-    """데이터셋으로 뉴럴 네트워크를 훈련합니다.
+    """
+    데이터셋으로 훈련
 
     :param dataloader: 파이토치 데이터로더
     :type dataloader: DataLoader
@@ -92,6 +95,7 @@ def train(
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
+
         loss_value += loss.item()
         outputs = outputs.argmax(dim=-1)
         accuracy += (outputs == targets).sum().item()
@@ -109,11 +113,12 @@ def train(
 
             loss_value = 0
             accuracy = 0
-        wandb.log({
-                "train_loss": train_loss,
-                "train_acc": train_acc,
-                'train_rgb': wandb.Image(images[0], caption=f'{targets[0]}')
-            }, step=epoch)
+        if not configs['fast_train_mode']:
+            wandb.log({
+                    "train_loss": train_loss,
+                    "train_acc": train_acc,
+                    'train_rgb': wandb.Image(images[0], caption=f'{targets[0]}')
+                }, step=epoch)
     if scheduler is not None:
         scheduler.step()
 
@@ -126,7 +131,8 @@ def validation(
     loss_fn: nn.Module,
     epoch: int
 ) -> float:
-    """데이터셋으로 뉴럴 네트워크의 성능을 검증합니다.
+    """
+    데이터셋으로 검증
 
     :param dataloader: 파이토치 데이터로더
     :type dataloader: DataLoader
@@ -163,10 +169,11 @@ def validation(
                 idx = random.randint(0, outputs.size(0)-1)
                 outputs = str(outputs[idx].cpu().numpy())
                 targets = str(targets[idx].cpu().numpy())
-                example_images.append(wandb.Image(
-                    images[idx],
-                    caption="Pred: {} Truth: {}".format(outputs, targets)
-                ))
+                if not configs['fast_train_mode']:
+                    example_images.append(wandb.Image(
+                        images[idx],
+                        caption="Pred: {} Truth: {}".format(outputs, targets)
+                    ))
 
     val_loss = np.sum(valid_loss) / len(dataloader)
     val_acc = np.sum(valid_acc) / len(dataloader.dataset)
@@ -176,12 +183,13 @@ def validation(
         f"valid loss {val_loss:4.4} | valid acc {val_acc:4.2%}"
         f"\nvalid f1 score {val_f1:.5}"
     )
-    wandb.log({
-        "Image": example_images,
-        "valid_loss": val_loss,
-        "valid_acc": val_acc,
-        "val_f1_score": val_f1
-    }, step=epoch)
+    if not configs['fast_train_mode']:
+        wandb.log({
+            "Image": example_images,
+            "valid_loss": val_loss,
+            "valid_acc": val_acc,
+            "val_f1_score": val_f1
+        }, step=epoch)
     torch.save(
         model.state_dict(),
         f'{save_dir}/{epoch}-{val_loss:4.4}-{val_acc:4.2}.pth'
@@ -192,70 +200,77 @@ def validation(
     return val_loss
 
 
-def run_pytorch(configs) -> None:
-    """학습 파이토치 파이프라인
+def run_pytorch(configs: Dict) -> None:
+    """
+    학습 파이토치 파이프라인
 
-    :param configs: 학습에 사용할 config들
+    :param configs: 학습에 사용할 config
     :type configs: dict
     """
-    wandb.init(
-        project="level1-imageclassification-cv-07",
-        entity='naver-ai-tech-cv07',
-        config={
-            'seed': configs['seed'],
-            'lr': configs['train']['lr'],
-            'model': configs['model'],
-            'epoch': configs['train']['epoch'],
-            'batch_size': configs['train']['batch_size'],
-            'img_size': configs['data']['image_size'],
-            'val_rate': configs['data']['valid_rate']
-        }
+
+    if not configs['fast_train_mode']:
+        wandb.init(
+            project="level1-imageclassification-cv-07",
+            entity='naver-ai-tech-cv07',
+            config={
+                'seed': configs['seed'],
+                'lr': configs['train']['lr'],
+                'model': configs['model'],
+                'epoch': configs['train']['epoch'],
+                'batch_size': configs['train']['batch_size'],
+                'img_size': configs['data']['image_size'],
+                'val_rate': configs['data']['valid_rate']
+            }
+        )
+
+    dataset = MaskSplitByProfileDataset(
+        image_dir=configs['data']['train_dir'],
+        valid_rate=configs['data']['valid_rate'],
+        csv_path=configs['data']['csv_dir']
     )
+
+    train_data, val_data = dataset.split_dataset()
+
+    if configs['train']['imagenet']:
+        mean = [0.548, 0.504, 0.479]
+        std = [0.237, 0.247, 0.246]
+    else:
+        mean = train_data.mean
+        std = train_data.std
+
     width, height = map(int, configs['data']['image_size'].split(','))
-    # train_transforms = TrainAugmentation(resize=[width, height])
-    import albumentations as A
-    mean = [0.548, 0.504, 0.479]
-    std = [0.237, 0.247, 0.246]
     train_transforms = A.Compose([
         A.Resize(width, height),
         A.Normalize(mean=mean, std=std),
-        A.pytorch.ToTensorV2()
+        ToTensorV2()
     ])
     valid_transforms = A.Compose([
         A.Resize(width, height),
         A.Normalize(mean=mean, std=std),
-        A.pytorch.ToTensorV2()
+        ToTensorV2()
     ])
 
-    dataset = MaskSplitByProfileDataset(
-        image_dir=configs['data']['train_dir'],
-        csv_path=configs['data']['csv_dir'],
-        valid_rate=configs['data']['valid_rate']
-    )
-
-    dataset.set_transform(train_transforms)
-    train_data, val_data = dataset.split_dataset()
+    train_data.set_transform(train_transforms)
+    val_data.set_transform(valid_transforms)
 
     train_loader = DataLoader(
         train_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
-        shuffle=True,
-        pin_memory=True,
+        shuffle=True
     )
+
     val_loader = DataLoader(
         val_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
-        shuffle=False,
-        pin_memory=True,
+        shuffle=False
     )
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
     model = SingleLabelModel().to(device)
 
-    loss_fn = get_label_smooth_loss() # get_cross_entropy_loss()
+    loss_fn = get_label_smooth_loss()
     optimizer = get_adam(model, configs)
     scheduler = None
 
@@ -269,8 +284,8 @@ def run_pytorch(configs) -> None:
             if not os.listdir(os.path.join(save_dir, version)):
                 save_dir = os.path.join(save_dir, version)
                 break
-            i += 1
-            continue
+            else:
+                i += 1
         else:
             save_dir = os.path.join(save_dir, version)
             os.makedirs(save_dir)
@@ -278,7 +293,8 @@ def run_pytorch(configs) -> None:
 
     best_loss = 100
     cnt = 0
-    for e in range(configs['train']['epoch']):
+    epoch = configs['train']['epoch'] if not configs['fast_train_mode'] else 1
+    for e in range(epoch):
         print(f'Epoch {e+1}\n-------------------------------')
         train(
             configs, train_loader, device, model, loss_fn,

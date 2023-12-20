@@ -11,7 +11,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from datasets.datasets import TestDataset
+from src.datasets.mask_datasets import TestDataset
 from models.mask_model import MultiLabelModel
 
 
