@@ -88,7 +88,6 @@ def mixuploss(
     return lambda_ * criterion(pred, labels_a) + \
         (1 - lambda_) * criterion(pred, labels_b)
 
-
 def cutmix_aug(input, target):
     def rand_bbox(size, lam):
         W = size[2]
