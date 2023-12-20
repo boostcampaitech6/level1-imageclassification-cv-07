@@ -18,7 +18,7 @@
 ├── results
 ├── src
 │   ├── datasets
-│   │   └── mask_dataset.py
+│   │   └── mask_datasets.py
 │   ├── models
 │   │   └── mask_model.py
 │   ├── ops
@@ -32,8 +32,8 @@
 │   ├── visualization
 │   ├── multi_label_train.py
 │   ├── multi_label_test.py
-│   ├── train.py - 수정중
-│   └── eval.py - 수정중
+│   ├── train.py
+│   └── eval.py
 ├── wandb
 ├── train.sh
 └── eval.sh

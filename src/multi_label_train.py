@@ -8,16 +8,18 @@ import numpy as np
 from omegaconf import OmegaConf
 import wandb
 from sklearn.metrics import f1_score
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from datasets.datasets import MultiLabelMaskSplitByProfileDataset
+from src.datasets.mask_datasets import MultiLabelMaskSplitByProfileDataset
 from models.mask_model import MultiLabelModel
-from utils.utils import get_lr
-from ops.losses import get_cross_entropy_loss
-from ops.optim import get_adam
+from utils.utils import get_lr, seed_everything
+from ops.losses import get_loss
+from ops.optim import get_optim
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -26,38 +28,28 @@ _Optimizer = torch.optim.Optimizer
 _Scheduler = torch.optim.lr_scheduler._LRScheduler
 
 
-def seed_everything(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # if use multi-GPU
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(seed)
-    random.seed(seed)
-
-
 def train(
-    configs: Dict,
-    dataloader: DataLoader,
-    device: str,
-    model: nn.Module,
-    loss_fn: nn.Module,
-    optimizer: _Optimizer,
-    scheduler: _Scheduler,
-    epoch: int
+    configs: Dict, dataloader: DataLoader, device: str,
+    model: nn.Module, loss_fn: nn.Module, optimizer: _Optimizer,
+    scheduler: _Scheduler, epoch: int
 ) -> None:
-    """데이터셋으로 뉴럴 네트워크를 훈련합니다.
+    """
+    데이터셋으로 훈련
 
-    :param dataloader: 파이토치 데이터로더
+    :param dataloader: PyTorch DataLoader
     :type dataloader: DataLoader
     :param device: 훈련에 사용되는 장치
     :type device: str
     :param model: 훈련에 사용되는 모델
     :type model: nn.Module
-    :param loss_fn: 훈련에 사용되는 오차 함수
+    :param loss_fn: 훈련에 사용되는 손실 함수
     :type loss_fn: nn.Module
     :param optimizer: 훈련에 사용되는 옵티마이저
     :type optimizer: torch.optim.Optimizer
+    :param scheduler: 훈련에 사용되는 스케줄러
+    :type scheduler: torch.optim.lr_scheduler._LRScheduler
+    :param epoch: 현재 훈련되는 epoch
+    :type epoch: int
     """
     model.train()
 
@@ -98,15 +90,17 @@ def train(
         gender_match += (gen_out.argmax(dim=-1) == gender_label).sum().item()
         age_match += (age_out.argmax(dim=-1) == age_label).sum().item()
 
-        if (batch+1) % 50 == 0:
-            train_loss = loss_value / 50
-            mask_loss = mask_loss_value / 50
-            gender_loss = gender_loss_value / 50
-            age_loss = age_loss_value / 50
+        log_term = configs['train']['log_interval']
+        if (batch+1) % log_term == 0:
+            train_loss = loss_value / log_term
+            mask_loss = mask_loss_value / log_term
+            gender_loss = gender_loss_value / log_term
+            age_loss = age_loss_value / log_term
 
-            mask_acc = mask_match / configs['train']['batch_size'] / 50
-            gender_acc = gender_match / configs['train']['batch_size'] / 50
-            age_acc = age_match / configs['train']['batch_size'] / 50
+            batch_size = configs['train']['batch_size']
+            mask_acc = mask_match / batch_size / log_term
+            gender_acc = gender_match / batch_size / log_term
+            age_acc = age_match / batch_size / log_term
             train_acc = (mask_acc + gender_acc + age_acc) / 3
 
             current_lr = get_lr(optimizer)
@@ -119,17 +113,6 @@ def train(
                 f"train acc {train_acc:4.2%} | mask acc {mask_acc:4.2%} "
                 f"| gender acc {gender_acc:4.2%} | age acc {age_acc:4.2%}"
             )
-            wandb.log({
-                "train_loss": train_loss,
-                "train_acc": train_acc,
-                "mask_loss": mask_loss,
-                "mask_acc": mask_acc,
-                "gender_loss": gender_loss,
-                "gender_acc": gender_acc,
-                "age_loss": age_loss,
-                "age_acc": age_acc,
-                'train_rgb': wandb.Image(images[0], caption=f'{targets[0]}')
-            })
 
             loss_value = 0
             mask_loss_value = 0
@@ -140,28 +123,42 @@ def train(
             gender_match = 0
             age_match = 0
 
+        if not configs['fast_train_mode']:
+            wandb.log({
+                "train_loss": train_loss,
+                "train_acc": train_acc,
+                "mask_loss": mask_loss,
+                "mask_acc": mask_acc,
+                "gender_loss": gender_loss,
+                "gender_acc": gender_acc,
+                "age_loss": age_loss,
+                "age_acc": age_acc,
+                'train_rgb': wandb.Image(images[0], caption=f'{targets[0]}')
+            }, step=epoch)
+
     if scheduler is not None:
         scheduler.step()
 
 
 def validation(
-    save_dir: os.PathLike,
-    dataloader: DataLoader,
-    device: str,
-    model: nn.Module,
-    loss_fn: nn.Module,
-    epoch: int
-) -> None:
-    """데이터셋으로 뉴럴 네트워크의 성능을 검증합니다.
+    dataloader: DataLoader, save_dir: os.PathLike, device: str,
+    model: nn.Module, loss_fn: nn.Module, epoch: int
+) -> float:
+    """
+    데이터셋으로 검증
 
-    :param dataloader: 파이토치 데이터로더
+    :param dataloader: PyTorch DataLoader
     :type dataloader: DataLoader
     :param device: 훈련에 사용되는 장치
     :type device: str
     :param model: 훈련에 사용되는 모델
     :type model: nn.Module
-    :param loss_fn: 훈련에 사용되는 오차 함수
+    :param loss_fn: 훈련에 사용되는 손실 함수
     :type loss_fn: nn.Module
+    :param epoch: 현재 훈련되는 epoch
+    :type epoch: int
+    :return: valid_loss
+    :rtype: float
     """
     model.eval()
 
@@ -212,7 +209,7 @@ def validation(
             val_labels.extend(labels.cpu().numpy())
             val_preds.extend(preds.cpu().numpy())
 
-            if (batch+1) % 50 == 0:
+            if (batch+1) % configs['train']['log_interval'] == 0:
                 idx = random.randint(0, mask_out.size(0)-1)
                 outputs = str(mask_out[idx].cpu().numpy()) + \
                     str(gen_out[idx].cpu().numpy()) + \
@@ -220,13 +217,13 @@ def validation(
                 targets = str(mask_label[idx].cpu().numpy()) + \
                     str(gender_label[idx].cpu().numpy()) +\
                     str(age_label[idx].cpu().numpy())
-                example_images.append(
-                    wandb.Image(
-                        images[idx],
-                        caption="Pred:{} Truth:{}".format(outputs, targets)
+                if not configs['fast_train_mode']:
+                    example_images.append(
+                        wandb.Image(
+                            images[idx],
+                            caption="Pred:{} Truth:{}".format(outputs, targets)
+                        )
                     )
-                )
-                wandb.log({"Image": example_images})
 
     val_loss = np.sum(val_losses) / len(dataloader)
     val_mask_loss = np.sum(val_mask_losses) / len(dataloader)
@@ -248,17 +245,21 @@ def validation(
         f"| gender acc {gender_acc:4.2%} | age acc {age_acc:4.2%}"
         f"\nvalid f1 score {val_f1:.5}"
     )
-    wandb.log({
-        "valid_loss": val_loss,
-        "valid_acc": val_acc,
-        "valid_mask_loss": val_mask_loss,
-        "mask_acc": mask_acc,
-        "valid_gender_loss": val_gender_loss,
-        "gender_acc": gender_acc,
-        "valid_age_loss": val_age_loss,
-        "age_acc": age_acc,
-        "val_f1_score": val_f1
-    })
+
+    if not configs['fast_train_mode']:
+        wandb.log({
+            "Image": example_images,
+            "valid_loss": val_loss,
+            "valid_acc": val_acc,
+            "valid_mask_loss": val_mask_loss,
+            "mask_acc": mask_acc,
+            "valid_gender_loss": val_gender_loss,
+            "gender_acc": gender_acc,
+            "valid_age_loss": val_age_loss,
+            "age_acc": age_acc,
+            "val_f1_score": val_f1
+        })
+
     torch.save(
         model.state_dict(),
         f'{save_dir}/{epoch}-{val_loss:4.2}-{val_acc:4.2}.pth'
@@ -266,14 +267,13 @@ def validation(
     print(
         f'Saved Model to {save_dir}/{epoch}-{val_loss:4.2}-{val_acc:4.2}.pth'
     )
-
     return val_loss
 
 
 def run_pytorch(configs) -> None:
     """학습 파이토치 파이프라인
 
-    :param configs: 학습에 사용할 config들
+    :param configs: 학습에 사용할 config
     :type configs: dict
     """
     wandb.init(
@@ -281,53 +281,64 @@ def run_pytorch(configs) -> None:
         entity='naver-ai-tech-cv07',
         config={
             'seed': configs['seed'],
-            'lr': configs['train']['lr'],
             'model': configs['model'],
-            'epoch': configs['train']['epoch'],
-            'batch_size': configs['train']['batch_size'],
             'img_size': configs['data']['image_size'],
-            'val_rate': configs['data']['valid_rate']
+            'loss': configs['train']['loss'],
+            'optim': configs['train']['optim'],
+            'batch_size': configs['train']['batch_size'],
+            'lr': configs['train']['lr'],
+            'epoch': configs['train']['epoch'],
+            'imagenet': configs['train']['imagenet'],
+            'early_patience': configs['train']['early_patience'],
         }
     )
+
+    dataset = MultiLabelMaskSplitByProfileDataset(
+        image_dir=configs['data']['train_dir'],
+        valid_rate=configs['data']['valid_rate'],
+        csv_path=configs['data']['csv_dir']
+    )
+
     width, height = map(int, configs['data']['image_size'].split(','))
-    # train_transforms = TrainAugmentation(resize=[width, height])
-    import albumentations as A
-    mean = [0.548, 0.504, 0.479]
-    std = [0.237, 0.247, 0.246]
+    if configs['train']['imagenet']:
+        mean = [0.548, 0.504, 0.479]
+        std = [0.237, 0.247, 0.246]
+    else:
+        mean = dataset.mean
+        std = dataset.std
+
     train_transforms = A.Compose([
         A.Resize(width, height),
         A.Normalize(mean=mean, std=std),
-        A.pytorch.ToTensorV2()
+        ToTensorV2()
     ])
-    dataset = MultiLabelMaskSplitByProfileDataset(
-        image_dir=configs['data']['train_dir'],
-        csv_path=configs['data']['csv_dir'],
-        valid_rate=configs['data']['valid_rate']
-    )
-    dataset.set_transform(train_transforms)
+    valid_transforms = A.Compose([
+        A.Resize(width, height),
+        A.Normalize(mean=mean, std=std),
+        ToTensorV2()
+    ])
+
+    dataset.set_transform(train_transforms, valid_transforms)
     train_data, val_data = dataset.split_dataset()
 
     train_loader = DataLoader(
         train_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
-        shuffle=True,
-        pin_memory=True
+        shuffle=True
     )
     val_loader = DataLoader(
         val_data,
         batch_size=configs['train']['batch_size'],
         num_workers=multiprocessing.cpu_count() // 2,
-        shuffle=False,
-        pin_memory=True
+        shuffle=False
     )
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
     model = MultiLabelModel().to(device)
 
-    loss_fn = get_cross_entropy_loss()
-    optimizer = get_adam(model, configs)
+    loss_fn = get_loss(configs['train']['loss'])
+    optimizer = get_optim(configs['train']['optim'], model, configs)
     scheduler = None
 
     save_dir = os.path.join(configs['ckpt_path'], str(model.name))
@@ -340,8 +351,8 @@ def run_pytorch(configs) -> None:
             if not os.listdir(os.path.join(save_dir, version)):
                 save_dir = os.path.join(save_dir, version)
                 break
-            i += 1
-            continue
+            else:
+                i += 1
         else:
             save_dir = os.path.join(save_dir, version)
             os.makedirs(save_dir)
@@ -349,14 +360,15 @@ def run_pytorch(configs) -> None:
 
     best_loss = 100
     cnt = 0
-    for e in range(configs['train']['epoch']):
+    epoch = configs['train']['epoch'] if not configs['fast_train_mode'] else 1
+    for e in range(epoch):
         print(f'Epoch {e+1}\n-------------------------------')
         train(
-            configs, train_loader, device,
-            model, loss_fn, optimizer, scheduler, e+1
+            configs, train_loader, device, model, loss_fn,
+            optimizer, scheduler, e+1
         )
         val_loss = validation(
-            save_dir, val_loader, device, model, loss_fn, e+1
+            val_loader, save_dir, device, model, loss_fn, e+1
         )
         if val_loss < best_loss:
             best_loss = val_loss

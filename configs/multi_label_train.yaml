@@ -1,14 +1,22 @@
-model: 'MaskModelV2'
 task_name: "mask_classification"
-ckpt_path: './checkpoints'
 seed: 42
+model: 'convnext_small.fb_in22k'
+ckpt_path: './checkpoints'
+
+fast_train_mode: False
+
 data:
   train_dir: "/data/ephemeral/home/train/images"
   csv_dir: "/data/ephemeral/home/train/train.csv"
   valid_rate: 0.2
-  image_size: '380, 380'
+  image_size: '512, 384'
+
 train:
+  loss: 'cross_entropy'
+  optim: 'adam'
   batch_size: 32
-  lr: 0.001
+  lr: 0.0001
   epoch: 25
+  imagenet: False
   early_patience: 5
+  log_interval: 50

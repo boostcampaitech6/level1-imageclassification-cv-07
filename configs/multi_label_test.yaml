@@ -1,7 +1,14 @@
 task_name: "mask_classification"
-ckpt_path: './checkpoints/~'
 seed: 42
+model: 'convnext_small.fb_in22k'
+ckpt_path: './checkpoints/~'
+
 data:
-  csv_dir: "/data/ephemeral/home/eval/info.csv"
-  test_dir: "/data/ephemeral/home/eval/images"
-  image_size: '380, 380'
+  csv_dir: "./data/eval/info.csv"
+  test_dir: "./data/eval/images"
+  image_size: '512, 384'
+
+train:
+  imagenet: False
+  loss: 'cross_entropy'
+  optim: 'adam'
