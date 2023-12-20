@@ -28,7 +28,7 @@ warnings.filterwarnings('ignore')
 
 _Optimizer = torch.optim.Optimizer
 _Scheduler = torch.optim.lr_scheduler._LRScheduler
-
+scaler = GradScaler()
 
 def seed_everything(seed: int) -> None:
     """
