@@ -44,9 +44,76 @@ class SingleLabelModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.model = timm.create_model(
-            'tf_efficientnet_b4_ns', pretrained=True, num_classes=18
+            'convnext_small.fb_in22k', pretrained=True, num_classes=18
         )
-        self.name = 'tf_efficientnet_b4_ns_mask_singlelabel'
+        self.name = 'convnext_small.fb_in22k_singlelabel'
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
+
+
+class ResNet50Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = timm.create_model(
+            'resnet50.a1_in1k', pretrained=True, num_classes=18
+        )
+        self.name = 'resnet50.a1_in1k_singlelabel'
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
+
+
+class EfficientNetB4Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = timm.create_model(
+            'tf_efficientnet_b4.ns_jft_in1k', pretrained=True, num_classes=18
+        )
+        self.name = 'tf_efficientnet_b4.ns_jft_in1k_singlelabel'
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
+
+
+class EfficientNetB7Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = timm.create_model(
+            'tf_efficientnet_b7.ns_jft_in1k', pretrained=True, num_classes=18
+        )
+        self.name = 'tf_efficientnet_b7.ns_jft_in1k_singlelabel'
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
+
+
+class VITModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = timm.create_model(
+            'vit_base_patch16_224.augreg2_in21k_ft_in1k',
+            pretrained=True, num_classes=18
+        )
+        self.name = 'vit_base_patch16_224.augreg2_in21k_ft_in1k_singlelabel'
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
+
+
+class SwinTModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = timm.create_model(
+            'swin_base_patch4_window7_224.ms_in22k_ft_in1k',
+            pretrained=True, num_classes=18
+        )
+        self.name = 'swin_base_patch4_window7_224.ms_in22k_ft_in1k_singlelabel'
 
     def forward(self, x):
         x = self.model(x)
