@@ -82,7 +82,7 @@ def train(
             outputs = model(images)
             loss = loss_fn(outputs, targets)
             
-        if cutmix and (batch + 1) % 3 == 0:
+        if cutmix and (batch + 1) % 4 == 0:
             images, target_a, target_b, lam = cutmix_aug(images, targets)
             outputs = model(images)
             loss = cutmixloss(

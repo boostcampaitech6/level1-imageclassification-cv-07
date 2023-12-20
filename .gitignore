@@ -30,3 +30,4 @@ wandb/
 results/
 /logs/
 .env
+nohup.out
