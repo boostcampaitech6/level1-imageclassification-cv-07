@@ -2,7 +2,15 @@ import timm
 from torch import nn
 
 
-def get_model(model_name):
+def get_model(model_name: str) -> nn.Module:
+    """
+    module 얻는 method
+
+    :param model_name: loss name
+    :type model_name: str
+    :return: model
+    :rtype: nn.Module
+    """
     if model_name == 'convnext_small.fb_in22k':
         return SingleLabelModel()
     elif model_name == 'resnet50.a1_in1k':

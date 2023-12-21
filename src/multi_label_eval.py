@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-from src.datasets.mask_datasets import TestDataset
+from datasets.mask_datasets import TestDataset
 from models.mask_model import MultiLabelModel
 from utils.utils import seed_everything
 

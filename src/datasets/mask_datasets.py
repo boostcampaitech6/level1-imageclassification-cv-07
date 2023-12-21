@@ -806,11 +806,3 @@ class TestDataset(Dataset):
             if isinstance(self.transform, A.Compose):
                 image = self.transform(image=image)['image']
         return image
-
-
-class TTADataset(Dataset):
-    """
-    TTA Dataset 클래스 정의
-    이미지와 불러와서 Tensor로 값 반환
-    """
-    pass

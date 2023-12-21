@@ -15,7 +15,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from src.datasets.mask_datasets import MultiLabelMaskSplitByProfileDataset
+from datasets.mask_datasets import MultiLabelMaskSplitByProfileDataset
 from models.mask_model import MultiLabelModel
 from utils.utils import get_lr, seed_everything
 from ops.losses import get_loss

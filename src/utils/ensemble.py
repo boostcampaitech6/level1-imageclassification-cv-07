@@ -3,7 +3,9 @@ import pandas as pd
 
 
 if __name__ == '__main__':
-    submit_folder = '../../results/ensemble/'
+    root = '../../results/'
+    submit_csv = pd.read_csv('../../data/eval/info.csv', index_col=False)
+    submit_folder = os.path.join(root, 'ensemble')
     if not os.path.exists(submit_folder):
         os.makedirs(submit_folder)
     i = 0
@@ -17,11 +19,9 @@ if __name__ == '__main__':
 
     csv_list = ['', '', '']
 
-    submit = pd.read_csv(f'{save_csv}', index_col=False)
-
     temp = pd.DataFrame()
     for idx, csv in enumerate(csv_list):
         temp[f'{idx}'] = pd.read_csv(csv, index_col=False)['ans']
 
-    submit['ans'] = temp.mode(axis=1)[0].astype('int')
-    submit.to_csv(os.path.join(submit_folder, 'soft_voting.csv'), index=False)
+    submit_csv['ans'] = temp.mode(axis=1)[0].astype('int')
+    submit_csv.to_csv(os.path.join(save_csv), index=False)
