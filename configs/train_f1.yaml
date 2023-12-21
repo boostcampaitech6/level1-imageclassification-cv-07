@@ -6,13 +6,13 @@ ckpt_path: './checkpoints'
 fast_train_mode: False
 
 data:
-  train_dir: "/data/ephemeral/home/seg_data/train/images"
-  csv_dir: "/data/ephemeral/home/seg_data/train/train.csv"
+  train_dir: "/data/ephemeral/home/train/images"
+  csv_dir: "/data/ephemeral/home/train/train.csv"
   valid_rate: 0.2
   image_size: '512, 384'
 
 train:
-  loss: 'label_smooth'
+  loss: 'f1'
   optim: 'adamw'
   batch_size: 16
   lr: 0.0001
