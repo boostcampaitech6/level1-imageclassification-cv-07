@@ -2,6 +2,7 @@
 
 ## 팀 소개
 | 이름 | 역할 |
+| --- | --- |
 | [박상언](https://github.com/PSangEon) | CutMix 실험, 모형 실험, Git branch 관리 |
 | [지현동](https://github.com/tolfromj) | 마스크, 성별, 나이 따로 실험 후 못 맞히는 문제 판별, 모형 실험, Mixup 실험 |
 | [오왕택](https://github.com/ohkingtaek) | Baseline code 작성, YOLOv8 Ultralytics로 사진 탐지, 모형 실험, Mixup 실험 |
@@ -46,7 +47,7 @@
 
 ## Wrap-Up Report
 
-[Wrap-Up-Report](docs/CV기초대회 분류_CV_팀 리포트(07조).pdf) 
+- [Wrap-Up Report](https://github.com/boostcampaitech6/level1-imageclassification-cv-07/blob/main/docs/CV%EA%B8%B0%EC%B4%88%EB%8C%80%ED%9A%8C%20%EB%B6%84%EB%A5%98_CV_%ED%8C%80%20%EB%A6%AC%ED%8F%AC%ED%8A%B8(07%EC%A1%B0).pdf)
 
 ## File Tree
 
