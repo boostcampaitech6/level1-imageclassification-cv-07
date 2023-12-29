@@ -1,0 +1,14 @@
+task_name: "mask_classification"
+seed: 42
+model: 'convnext_small.fb_in22k'
+ckpt_path: './checkpoints/~'
+
+data:
+  csv_dir: "./data/eval/info.csv"
+  test_dir: "./data/eval/images"
+  image_size: '512, 384'
+
+train:
+  imagenet: False
+  loss: 'cross_entropy' #focal, label_smooth, cross_entropy, f1
+  optim: 'adam' #sgd, adam, adamw, lion
